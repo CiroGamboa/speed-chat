@@ -638,7 +638,7 @@
         <!-- Timers will be added here -->
     </div>
 
-    <audio id="bell" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
+    <audio id="bell" src="alarm.mp3"></audio>
 
     <script>
         let MS5 = 5 * 60 * 1000;
@@ -647,6 +647,12 @@
         let lineConfigs = [];
         let TOTAL_SESSION_TIME = 30 * 60 * 1000;
         let FINISH_WINDOW_MIN = 5;
+
+        // Get the duration of the alarm sound
+        let alarmDuration = 0;
+        bell.addEventListener('loadedmetadata', function () {
+            alarmDuration = bell.duration * 1000; // Convert to milliseconds
+        });
 
         function resetApplication() {
             if (confirm('Are you sure you want to reset all settings? This will clear all saved configurations and timers.')) {
@@ -837,10 +843,10 @@
             const notification = document.getElementById('changeSeatNotification');
             notification.style.display = 'block';
 
-            // Hide notification after animation
+            // Hide notification after the alarm duration
             setTimeout(() => {
                 notification.style.display = 'none';
-            }, 8000); // 8 seconds
+            }, alarmDuration);
         }
 
         function updateTimers() {
@@ -912,11 +918,20 @@
         }
 
         // Add event listeners for global settings
-        document.getElementById('sessionDuration').addEventListener('change', saveState);
-        document.getElementById('alarmInterval').addEventListener('change', saveState);
+        document.getElementById('sessionDuration').addEventListener('change', function () {
+            updateTimingSettings();
+            updateTimers();
+        });
+
+        document.getElementById('alarmInterval').addEventListener('change', function () {
+            updateTimingSettings();
+            updateTimers();
+        });
+
         document.getElementById('finishWindow').addEventListener('change', function () {
             FINISH_WINDOW_MIN = parseInt(this.value);
             saveState();
+            updateTimers();
         });
 
         // Load saved state when page loads
