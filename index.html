@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Speed Chat Timers</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #fafafa;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            color: #4a4949;
+        }
+
+        .timer {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 200px;
+            margin: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 2px solid #ff97d7;
+            height: 120px;
+            vertical-align: top;
+        }
+
+        .timer.active {
+            border: 2px solid #8f0057;
+        }
+
+        .timer.inactive {
+            opacity: 0.6;
+        }
+
+        .timer .label {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            color: #8f0057;
+            height: 1.5rem;
+        }
+
+        .timer .count {
+            font-size: 2.7rem;
+            font-weight: bold;
+            color: #4a4949;
+            height: 2.5rem;
+            line-height: 2.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .config-section {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+        }
+
+        .config-header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            cursor: pointer;
+            padding: 0;
+            margin-bottom: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .config-content {
+            display: none;
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
+            border: 2px solid #ff97d7;
+            position: absolute;
+            top: 100%;
+            right: 0;
+        }
+
+        .config-content.visible {
+            display: block;
+        }
+
+        .config-header.open {
+            background: #ff97d7;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .gear-icon {
+            width: 36px;
+            height: 36px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            stroke: #4a4949;
+        }
+
+        .config-header.open .gear-icon {
+            stroke: #8f0057;
+        }
+
+        .gear-icon:hover {
+            transform: rotate(45deg);
+        }
+
+        .global-settings {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .global-settings label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #8f0057;
+        }
+
+        .global-settings select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            color: #4a4949;
+        }
+
+        .line-config {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 4px;
+            align-items: center;
+            border: 1px solid #ff97d7;
+        }
+
+        .line-config input[type="text"] {
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            width: 100%;
+            color: #4a4949;
+        }
+
+        .line-config select {
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            min-width: 80px;
+            color: #4a4949;
+        }
+
+        .line-config button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .add-line-btn {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+
+        .start-btn {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .start-btn:hover,
+        .add-line-btn:hover {
+            background: #ff97d7;
+        }
+
+        .reset-btn {
+            background: #4a4949;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .reset-btn:hover {
+            background: #666;
+        }
+
+        .line-config button:hover {
+            background: #ff97d7;
+        }
+
+        h1 {
+            color: #8f0057;
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+        }
+
+        .logo-container {
+            width: 180px;
+            height: 180px;
+            margin: 0 auto 2rem;
+            background: #ff97d7;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            border: 2px solid #8f0057;
+        }
+
+        .logo {
+            width: 70%;
+            height: 70%;
+            object-fit: contain;
+        }
+
+        .notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(143, 0, 87, 0.95);
+            color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            z-index: 2000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            animation: fadeInOut 8s ease-in-out;
+        }
+
+        @keyframes fadeInOut {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+
+            10% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            80% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+        }
+
+        #timers-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem;
+            margin: 0 -1rem;
+        }
+
+        @media (max-width: 1200px) {
+            body {
+                padding: 1rem;
+                font-size: 20px;
+            }
+
+            #timers-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 2rem;
+                margin: 0;
+                padding: 0.5rem;
+            }
+
+            .timer {
+                width: 100%;
+                max-width: 400px;
+                margin: 0;
+                height: 220px;
+                padding: 2.5rem;
+                border-width: 4px;
+            }
+
+            .timer .label {
+                font-size: 2.2rem;
+                margin-bottom: 2rem;
+                height: 2.5rem;
+            }
+
+            .timer .count {
+                font-size: 5rem;
+                height: 5.5rem;
+                line-height: 5.5rem;
+            }
+
+            .logo-container {
+                width: 240px;
+                height: 240px;
+                margin: 0 auto 2.5rem;
+            }
+
+            h1 {
+                font-size: 3rem;
+                margin-bottom: 2.5rem;
+            }
+
+            .gear-icon {
+                width: 48px;
+                height: 48px;
+                stroke-width: 3;
+            }
+
+            .notification {
+                width: 95%;
+                max-width: 500px;
+                padding: 2.5rem;
+                font-size: 2.5rem;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .gear-icon {
+                width: 64px;
+                height: 64px;
+                stroke-width: 3.5;
+            }
+
+            .config-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                z-index: 2000;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+            }
+
+            .config-content {
+                width: 100%;
+                height: 100%;
+                max-width: 100vw;
+                max-height: 100vh;
+                border-radius: 0;
+                box-shadow: none;
+                padding: 2.5rem 1rem 1rem 1rem;
+                box-sizing: border-box;
+                z-index: 2001;
+                display: block;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .config-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                z-index: 2000;
+            }
+
+            .config-content {
+                width: 100vw;
+                height: 100vh;
+                max-width: 100vw;
+                max-height: 100vh;
+                border-radius: 0;
+                box-shadow: none;
+                top: 0;
+                left: 0;
+                right: 0;
+                padding: 2.5rem 1rem 1rem 1rem;
+                box-sizing: border-box;
+                z-index: 2001;
+            }
+
+            .timer {
+                width: 100%;
+                max-width: 400px;
+                margin: 0;
+                height: 220px;
+                padding: 2.5rem;
+                border-width: 4px;
+                border-radius: 12px;
+            }
+
+            .timer .label {
+                font-size: 2.5rem;
+                margin-bottom: 2rem;
+                height: 2.5rem;
+            }
+
+            .timer .count {
+                font-size: 5rem;
+                height: 5.5rem;
+                line-height: 5.5rem;
+            }
+
+            .logo-container {
+                border-width: 4px;
+                border-color: #8f0057;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="logo-container">
+        <img src="logo.png" alt="Speed Chat Logo" class="logo">
+    </div>
+    <h1>Welcome to Speed Chat!</h1>
+
+    <div class="notification" id="changeSeatNotification">
+        Change seat, go to the left
+    </div>
+
+    <div class="config-section">
+        <div class="config-header" onclick="toggleConfig()">
+            <svg class="gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                <path
+                    d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+        </div>
+        <div class="config-content" id="configContent">
+            <div class="global-settings">
+                <label for="sessionDuration">Session Duration:</label>
+                <select id="sessionDuration">
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="20">20 minutes</option>
+                    <option value="25">25 minutes</option>
+                    <option value="30" selected>30 minutes</option>
+                    <option value="35">35 minutes</option>
+                    <option value="40">40 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="50">50 minutes</option>
+                    <option value="55">55 minutes</option>
+                    <option value="60">60 minutes</option>
+                </select>
+
+                <label for="alarmInterval">Alarm Interval:</label>
+                <select id="alarmInterval">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="3">3 minutes</option>
+                    <option value="4">4 minutes</option>
+                    <option value="5" selected>5 minutes</option>
+                    <option value="6">6 minutes</option>
+                    <option value="7">7 minutes</option>
+                    <option value="8">8 minutes</option>
+                    <option value="9">9 minutes</option>
+                    <option value="10">10 minutes</option>
+                </select>
+            </div>
+
+            <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
+            <form id="scheduleForm">
+                <div id="linesContainer">
+                    <!-- Line configurations will be added here -->
+                </div>
+                <button type="submit" class="start-btn">Start Timers</button>
+            </form>
+            <button class="reset-btn" onclick="resetApplication()">Reset All Settings</button>
+        </div>
+    </div>
+
+    <div id="timers-container">
+        <!-- Timers will be added here -->
+    </div>
+
+    <audio id="bell" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
+
+    <script>
+        let MS5 = 5 * 60 * 1000;
+        const bell = document.getElementById('bell');
+        let scheduledTimes = {};
+        let lineConfigs = [];
+        let TOTAL_SESSION_TIME = 30 * 60 * 1000;
+
+        function resetApplication() {
+            if (confirm('Are you sure you want to reset all settings? This will clear all saved configurations and timers.')) {
+                // Clear localStorage
+                localStorage.removeItem('speedChatConfig');
+
+                // Reset variables
+                lineConfigs = [];
+                scheduledTimes = {};
+                TOTAL_SESSION_TIME = 30 * 60 * 1000;
+                MS5 = 5 * 60 * 1000;
+
+                // Reset form values
+                document.getElementById('sessionDuration').value = '30';
+                document.getElementById('alarmInterval').value = '5';
+
+                // Clear timers container
+                document.getElementById('timers-container').innerHTML = '';
+
+                // Add initial line
+                addLineConfig();
+
+                // Hide notification if visible
+                document.getElementById('changeSeatNotification').style.display = 'none';
+            }
+        }
+
+        // Load saved state
+        function loadSavedState() {
+            const savedConfig = localStorage.getItem('speedChatConfig');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                lineConfigs = config.lineConfigs;
+                scheduledTimes = config.scheduledTimes;
+                TOTAL_SESSION_TIME = config.sessionDuration * 60 * 1000;
+                MS5 = config.alarmInterval * 60 * 1000;
+
+                // Restore form values
+                document.getElementById('sessionDuration').value = config.sessionDuration;
+                document.getElementById('alarmInterval').value = config.alarmInterval;
+
+                // Update UI
+                updateLineConfigs();
+                updateTimers();
+            }
+        }
+
+        // Save current state
+        function saveState() {
+            const config = {
+                lineConfigs,
+                scheduledTimes,
+                sessionDuration: parseInt(document.getElementById('sessionDuration').value),
+                alarmInterval: parseInt(document.getElementById('alarmInterval').value)
+            };
+            localStorage.setItem('speedChatConfig', JSON.stringify(config));
+        }
+
+        function updateTimingSettings() {
+            const sessionMinutes = parseInt(document.getElementById('sessionDuration').value);
+            const alarmMinutes = parseInt(document.getElementById('alarmInterval').value);
+
+            TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
+            MS5 = alarmMinutes * 60 * 1000;
+            saveState();
+        }
+
+        function toggleConfig() {
+            const content = document.getElementById('configContent');
+            const header = document.querySelector('.config-header');
+            content.classList.toggle('visible');
+            header.classList.toggle('open');
+        }
+
+        function addLineConfig() {
+            const lineId = lineConfigs.length + 1;
+            const lineConfig = {
+                id: lineId,
+                name: `Line ${lineId}`,
+                time: ''
+            };
+            lineConfigs.push(lineConfig);
+            updateLineConfigs();
+            saveState();
+        }
+
+        function removeLineConfig(lineId) {
+            lineConfigs = lineConfigs.filter(config => config.id !== lineId);
+            updateLineConfigs();
+            saveState();
+        }
+
+        function updateLineConfigs() {
+            const container = document.getElementById('linesContainer');
+            container.innerHTML = lineConfigs.map(config => `
+                <div class="line-config">
+                    <input type="text" 
+                           value="${config.name}" 
+                           onchange="updateLineName(${config.id}, this.value)"
+                           placeholder="Line name">
+                    <select id="time${config.id}" required>
+                        ${generateTimeOptions().map(time =>
+                `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
+            ).join('')}
+                    </select>
+                    <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
+                </div>
+            `).join('');
+        }
+
+        function updateLineName(lineId, name) {
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (config) {
+                config.name = name;
+                saveState();
+            }
+        }
+
+        function pad(n) { return n.toString().padStart(2, '0'); }
+
+        function formatTime(date) {
+            return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        function generateTimeOptions() {
+            const now = new Date();
+            const startTime = new Date(now);
+            startTime.setMinutes(Math.ceil(startTime.getMinutes() / 5) * 5);
+            startTime.setSeconds(0);
+            startTime.setMilliseconds(0);
+
+            const endTime = new Date(now.getTime() + 2 * 60 * 60000);
+            const options = [];
+
+            while (startTime <= endTime) {
+                options.push(formatTime(startTime));
+                startTime.setMinutes(startTime.getMinutes() + 5);
+            }
+
+            return options;
+        }
+
+        function parseTime(hm) {
+            const [h, m] = hm.split(':').map(Number);
+            const d = new Date();
+            d.setHours(h, m, 0, 0);
+            return d.getTime();
+        }
+
+        document.getElementById('scheduleForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            updateTimingSettings();
+            scheduledTimes = {};
+
+            lineConfigs.forEach(config => {
+                const timeSelect = document.getElementById(`time${config.id}`);
+                scheduledTimes[config.id] = parseTime(timeSelect.value);
+                config.time = timeSelect.value;
+            });
+
+            updateTimers();
+            toggleConfig();
+            saveState();
+        });
+
+        function showChangeSeatNotification() {
+            const notification = document.getElementById('changeSeatNotification');
+            notification.style.display = 'block';
+
+            // Hide notification after animation
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 8000);
+        }
+
+        function updateTimers() {
+            const container = document.getElementById('timers-container');
+            container.innerHTML = lineConfigs.map(config => `
+                <div class="timer" data-line="${config.id}">
+                    <div class="label">${config.name}</div>
+                    <div class="count">–:–</div>
+                </div>
+            `).join('');
+
+            document.querySelectorAll('.timer').forEach(timer => {
+                const line = timer.dataset.line;
+                let lastBellTime = 0;
+
+                function update() {
+                    if (!scheduledTimes[line]) return;
+
+                    const now = Date.now();
+                    const startT = scheduledTimes[line];
+                    let remaining, status;
+
+                    if (now < startT) {
+                        const startTime = formatTime(new Date(startT));
+                        timer.querySelector('.count').textContent = `Starting at ${startTime}`;
+                        status = 'inactive';
+                    } else {
+                        const elapsed = now - startT;
+
+                        if (elapsed >= TOTAL_SESSION_TIME) {
+                            timer.querySelector('.count').textContent = "00:00";
+                            status = 'inactive';
+                        } else {
+                            remaining = TOTAL_SESSION_TIME - elapsed;
+                            const mm = Math.floor(remaining / 60000);
+                            const ss = Math.floor((remaining % 60000) / 1000);
+                            timer.querySelector('.count').textContent = `${pad(mm)}:${pad(ss)}`;
+                            status = 'active';
+
+                            const currentInterval = Math.floor(elapsed / MS5);
+                            if (currentInterval > lastBellTime) {
+                                bell.currentTime = 0;
+                                bell.play().catch(() => { });
+                                showChangeSeatNotification();
+                                lastBellTime = currentInterval;
+                            }
+                        }
+                    }
+
+                    timer.classList.toggle('active', status === 'active');
+                    timer.classList.toggle('inactive', status === 'inactive');
+                }
+
+                setInterval(update, 200);
+                update();
+            });
+        }
+
+        // Add event listeners for global settings
+        document.getElementById('sessionDuration').addEventListener('change', saveState);
+        document.getElementById('alarmInterval').addEventListener('change', saveState);
+
+        // Load saved state when page loads
+        loadSavedState();
+    </script>
+</body>
+
+</html>
