@@ -39,6 +39,16 @@
             opacity: 0.6;
         }
 
+        .timer.finish-window {
+            background: #8f0057 !important;
+            color: #fff !important;
+            border-color: #fff !important;
+        }
+
+        .timer.finish-window .label {
+            color: #ff97d7 !important;
+        }
+
         .timer .label {
             font-size: 1.3rem;
             margin-bottom: 0.5rem;
@@ -53,6 +63,20 @@
             height: 2.5rem;
             line-height: 2.5rem;
             margin-top: 0.5rem;
+        }
+
+        .timer .count.starting-text {
+            font-size: 1.7rem;
+            font-weight: 600;
+            color: #333;
+            line-height: 2.2rem;
+            white-space: nowrap;
+        }
+
+        .timer .count.lounge-text {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #fff;
         }
 
         .config-section {
@@ -87,6 +111,7 @@
             position: absolute;
             top: 100%;
             right: 0;
+            z-index: 1001;
         }
 
         .config-content.visible {
@@ -140,8 +165,8 @@
         }
 
         .line-config {
-            display: grid;
-            grid-template-columns: 1fr auto auto;
+            display: flex;
+            flex-direction: column;
             gap: 0.5rem;
             margin-bottom: 1rem;
             padding: 0.5rem;
@@ -149,6 +174,45 @@
             border-radius: 4px;
             align-items: center;
             border: 1px solid #ff97d7;
+        }
+
+        .line-fields {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .line-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            width: 100%;
+        }
+
+        .line-buttons button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        .line-buttons button:hover {
+            background: #ff97d7;
+            color: #fff;
+        }
+
+        .line-buttons button:last-child {
+            background: #4a4949;
+        }
+
+        .line-buttons button:last-child:hover {
+            background: #666;
         }
 
         .line-config input[type="text"] {
@@ -165,16 +229,6 @@
             border-radius: 4px;
             min-width: 80px;
             color: #4a4949;
-        }
-
-        .line-config button {
-            background: #8f0057;
-            color: white;
-            border: none;
-            padding: 0.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-            white-space: nowrap;
         }
 
         .add-line-btn {
@@ -399,6 +453,7 @@
                 width: 100vw;
                 height: 100vh;
                 z-index: 2000;
+                background: rgba(0, 0, 0, 0.5);
             }
 
             .config-content {
@@ -414,6 +469,15 @@
                 padding: 2.5rem 1rem 1rem 1rem;
                 box-sizing: border-box;
                 z-index: 2001;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .config-header {
+                position: fixed;
+                top: 1rem;
+                right: 1rem;
+                z-index: 2002;
             }
 
             .timer {
@@ -441,6 +505,53 @@
             .logo-container {
                 border-width: 4px;
                 border-color: #8f0057;
+            }
+        }
+
+        #scheduleForm {
+            position: relative;
+            padding-bottom: 120px;
+            /* Space for the sticky buttons */
+        }
+
+        .form-buttons {
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 1rem 0;
+            margin-top: 1rem;
+            border-top: 2px solid #ff97d7;
+            z-index: 1002;
+        }
+
+        .start-btn {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .reset-btn {
+            background: #4a4949;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        @media (max-width: 900px) {
+            .form-buttons {
+                padding: 1rem;
+                background: #fff;
+                box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
             }
         }
     </style>
@@ -494,6 +605,20 @@
                     <option value="9">9 minutes</option>
                     <option value="10">10 minutes</option>
                 </select>
+
+                <label for="finishWindow">Finish Window:</label>
+                <select id="finishWindow">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="3">3 minutes</option>
+                    <option value="4">4 minutes</option>
+                    <option value="5" selected>5 minutes</option>
+                    <option value="6">6 minutes</option>
+                    <option value="7">7 minutes</option>
+                    <option value="8">8 minutes</option>
+                    <option value="9">9 minutes</option>
+                    <option value="10">10 minutes</option>
+                </select>
             </div>
 
             <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
@@ -501,9 +626,11 @@
                 <div id="linesContainer">
                     <!-- Line configurations will be added here -->
                 </div>
-                <button type="submit" class="start-btn">Start Timers</button>
+                <div class="form-buttons">
+                    <button type="submit" class="start-btn">Start Timers</button>
+                    <button type="button" class="reset-btn" onclick="resetApplication()">Reset All Settings</button>
+                </div>
             </form>
-            <button class="reset-btn" onclick="resetApplication()">Reset All Settings</button>
         </div>
     </div>
 
@@ -519,6 +646,7 @@
         let scheduledTimes = {};
         let lineConfigs = [];
         let TOTAL_SESSION_TIME = 30 * 60 * 1000;
+        let FINISH_WINDOW_MIN = 5;
 
         function resetApplication() {
             if (confirm('Are you sure you want to reset all settings? This will clear all saved configurations and timers.')) {
@@ -530,10 +658,12 @@
                 scheduledTimes = {};
                 TOTAL_SESSION_TIME = 30 * 60 * 1000;
                 MS5 = 5 * 60 * 1000;
+                FINISH_WINDOW_MIN = 5;
 
                 // Reset form values
                 document.getElementById('sessionDuration').value = '30';
                 document.getElementById('alarmInterval').value = '5';
+                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
 
                 // Clear timers container
                 document.getElementById('timers-container').innerHTML = '';
@@ -555,6 +685,8 @@
                 scheduledTimes = config.scheduledTimes;
                 TOTAL_SESSION_TIME = config.sessionDuration * 60 * 1000;
                 MS5 = config.alarmInterval * 60 * 1000;
+                FINISH_WINDOW_MIN = config.finishWindow || 5;
+                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
 
                 // Restore form values
                 document.getElementById('sessionDuration').value = config.sessionDuration;
@@ -572,7 +704,8 @@
                 lineConfigs,
                 scheduledTimes,
                 sessionDuration: parseInt(document.getElementById('sessionDuration').value),
-                alarmInterval: parseInt(document.getElementById('alarmInterval').value)
+                alarmInterval: parseInt(document.getElementById('alarmInterval').value),
+                finishWindow: parseInt(document.getElementById('finishWindow').value)
             };
             localStorage.setItem('speedChatConfig', JSON.stringify(config));
         }
@@ -615,16 +748,21 @@
             const container = document.getElementById('linesContainer');
             container.innerHTML = lineConfigs.map(config => `
                 <div class="line-config">
-                    <input type="text" 
-                           value="${config.name}" 
-                           onchange="updateLineName(${config.id}, this.value)"
-                           placeholder="Line name">
-                    <select id="time${config.id}" required>
-                        ${generateTimeOptions().map(time =>
+                    <div class="line-fields">
+                        <input type="text" 
+                               value="${config.name}" 
+                               onchange="updateLineName(${config.id}, this.value)"
+                               placeholder="Line name">
+                        <select id="time${config.id}" required>
+                            ${generateTimeOptions().map(time =>
                 `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
             ).join('')}
-                    </select>
-                    <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
+                        </select>
+                    </div>
+                    <div class="line-buttons">
+                        <button type="button" onclick="updateLineTime(${config.id})">Update</button>
+                        <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -633,6 +771,17 @@
             const config = lineConfigs.find(c => c.id === lineId);
             if (config) {
                 config.name = name;
+                saveState();
+            }
+        }
+
+        function updateLineTime(lineId) {
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (config) {
+                const timeSelect = document.getElementById(`time${lineId}`);
+                scheduledTimes[lineId] = parseTime(timeSelect.value);
+                config.time = timeSelect.value;
+                updateTimers();
                 saveState();
             }
         }
@@ -691,7 +840,7 @@
             // Hide notification after animation
             setTimeout(() => {
                 notification.style.display = 'none';
-            }, 8000);
+            }, 8000); // 8 seconds
         }
 
         function updateTimers() {
@@ -706,6 +855,8 @@
             document.querySelectorAll('.timer').forEach(timer => {
                 const line = timer.dataset.line;
                 let lastBellTime = 0;
+                const label = timer.querySelector('.label');
+                const countElement = timer.querySelector('.count');
 
                 function update() {
                     if (!scheduledTimes[line]) return;
@@ -715,20 +866,32 @@
                     let remaining, status;
 
                     if (now < startT) {
-                        const startTime = formatTime(new Date(startT));
-                        timer.querySelector('.count').textContent = `Starting at ${startTime}`;
+                        countElement.textContent = `Starting at ${formatTime(new Date(startT))}`;
+                        countElement.classList.add('starting-text');
+                        timer.classList.remove('finish-window');
                         status = 'inactive';
                     } else {
+                        countElement.classList.remove('starting-text');
                         const elapsed = now - startT;
 
                         if (elapsed >= TOTAL_SESSION_TIME) {
-                            timer.querySelector('.count').textContent = "00:00";
+                            countElement.textContent = "00:00";
+                            timer.classList.remove('finish-window');
                             status = 'inactive';
                         } else {
                             remaining = TOTAL_SESSION_TIME - elapsed;
                             const mm = Math.floor(remaining / 60000);
                             const ss = Math.floor((remaining % 60000) / 1000);
-                            timer.querySelector('.count').textContent = `${pad(mm)}:${pad(ss)}`;
+                            // Check finish window
+                            if (remaining <= FINISH_WINDOW_MIN * 60000) {
+                                countElement.textContent = "Go to the lounge";
+                                countElement.classList.add('lounge-text');
+                                timer.classList.add('finish-window');
+                            } else {
+                                countElement.textContent = `${pad(mm)}:${pad(ss)}`;
+                                countElement.classList.remove('lounge-text');
+                                timer.classList.remove('finish-window');
+                            }
                             status = 'active';
 
                             const currentInterval = Math.floor(elapsed / MS5);
@@ -740,11 +903,9 @@
                             }
                         }
                     }
-
                     timer.classList.toggle('active', status === 'active');
                     timer.classList.toggle('inactive', status === 'inactive');
                 }
-
                 setInterval(update, 200);
                 update();
             });
@@ -753,6 +914,10 @@
         // Add event listeners for global settings
         document.getElementById('sessionDuration').addEventListener('change', saveState);
         document.getElementById('alarmInterval').addEventListener('change', saveState);
+        document.getElementById('finishWindow').addEventListener('change', function () {
+            FINISH_WINDOW_MIN = parseInt(this.value);
+            saveState();
+        });
 
         // Load saved state when page loads
         loadSavedState();
