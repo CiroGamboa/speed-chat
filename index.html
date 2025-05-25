@@ -1180,15 +1180,23 @@
         }
 
         function addLineConfig() {
+            // Find the highest existing line number
+            const existingNumbers = lineConfigs.map(config => {
+                const match = config.name.match(/Line (\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            });
+            const nextNumber = Math.max(0, ...existingNumbers) + 1;
+
             const lineId = lineConfigs.length + 1;
             const lineConfig = {
                 id: lineId,
-                name: `Line ${lineId}`,
+                name: `Line ${nextNumber}`,
                 time: '',
                 people: []
             };
             lineConfigs.push(lineConfig);
             updateLineConfigs();
+            updateTimers(); // Update timers immediately to show the new line
             saveState();
         }
 
@@ -1204,6 +1212,7 @@
                 <div class="line-config">
                     <div class="line-fields">
                         <input type="text" 
+                               class="line-name"
                                value="${config.name}" 
                                onchange="updateLineName(${config.id}, this.value)"
                                placeholder="Line name"
@@ -1251,7 +1260,8 @@
         function updateLineName(lineId, name) {
             const config = lineConfigs.find(c => c.id === lineId);
             if (config) {
-                config.name = name;
+                config.name = name || `Line ${lineId}`; // Ensure there's always a name
+                updateTimers(); // Update timers when name changes
                 saveState();
             }
         }
@@ -1691,10 +1701,17 @@
 
         // Add a helper function to safely add a line
         function addLine(name, people = []) {
+            // Find the highest existing line number
+            const existingNumbers = lineConfigs.map(config => {
+                const match = config.name.match(/Line (\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            });
+            const nextNumber = Math.max(0, ...existingNumbers) + 1;
+
             const lineId = lineConfigs.length + 1;
             const lineConfig = {
                 id: lineId,
-                name: name || `Line ${lineId}`,
+                name: name || `Line ${nextNumber}`,
                 time: '',
                 people: people || []
             };
@@ -1738,6 +1755,50 @@
                 console.error("Error saving state:", error);
             }
         }
+
+        function resetApplication() {
+            if (confirm('Are you sure you want to reset all settings? This will clear all saved configurations and timers.')) {
+                // Clear localStorage
+                localStorage.removeItem('speedChatConfig');
+
+                // Reset variables
+                lineConfigs = [];
+                scheduledTimes = {};
+                TOTAL_SESSION_TIME = 30 * 60 * 1000;
+                MS5 = 5 * 60 * 1000;
+                FINISH_WINDOW_MIN = 5;
+                MAX_PEOPLE_PER_LINE = 4;
+                BLINK_TIME_MIN = 5;
+
+                // Reset form values
+                document.getElementById('sessionDuration').value = '30';
+                document.getElementById('alarmInterval').value = '5';
+                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
+                document.getElementById('maxPeople').value = '4';
+                document.getElementById('blinkTime').value = '5';
+
+                // Clear timers container and lines container
+                document.getElementById('timers-container').innerHTML = '';
+                document.getElementById('linesContainer').innerHTML = '';
+
+                // Hide notification if visible
+                document.getElementById('changeSeatNotification').style.display = 'none';
+                document.getElementById('notificationOverlay').style.display = 'none';
+
+                // Update UI
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state to server
+                saveState();
+            }
+        }
+
+        // Add event listener for the reset button
+        document.querySelector('.reset-btn').addEventListener('click', function (e) {
+            e.preventDefault();
+            resetApplication();
+        });
     </script>
 </body>
 
