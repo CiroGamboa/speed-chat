@@ -1,0 +1,1 @@
+{"lineConfigs": [{"id": 1, "name": "Line 1", "people": [], "time": "00:15"}, {"id": 2, "name": "Line 2", "people": [], "time": "00:15"}], "scheduledTimes": {"1": 1748150100000, "2": 1748150100000}, "sessionDuration": null, "alarmInterval": null, "finishWindow": 5, "maxPeople": 4, "blinkTime": 5, "currentRole": "admin"}

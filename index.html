@@ -1089,45 +1089,39 @@
             }
         }
 
-        // Load saved state
-        function loadSavedState() {
-            const savedConfig = localStorage.getItem('speedChatConfig');
-            if (savedConfig) {
-                const config = JSON.parse(savedConfig);
-                lineConfigs = config.lineConfigs;
-                scheduledTimes = config.scheduledTimes;
-                TOTAL_SESSION_TIME = config.sessionDuration * 60 * 1000;
-                MS5 = config.alarmInterval * 60 * 1000;
-                FINISH_WINDOW_MIN = config.finishWindow || 5;
-                MAX_PEOPLE_PER_LINE = config.maxPeople || 4;
-                BLINK_TIME_MIN = config.blinkTime || 5;
-                currentRole = config.currentRole || 'admin';  // Load saved role or default to admin
-
-                // Set the role selector to the saved role
-                document.getElementById('userRole').value = currentRole;
-
-                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
-                document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE;
-                document.getElementById('blinkTime').value = BLINK_TIME_MIN;
-
-                // Restore form values
-                document.getElementById('sessionDuration').value = config.sessionDuration;
-                document.getElementById('alarmInterval').value = config.alarmInterval;
-
-                // Update UI
-                updateLineConfigs();
-                updateTimers();
-                updateUIBasedOnRole();  // Add this line to update UI based on saved role
-            } else {
-                // If no saved state, initialize with default values
-                currentRole = 'admin';
-                document.getElementById('userRole').value = currentRole;
-                updateUIBasedOnRole();
+        async function loadSavedState() {
+            try {
+                const response = await fetch('http://localhost:5001/state');
+                const config = await response.json();
+                if (config) {
+                    lineConfigs = config.lineConfigs || [];
+                    scheduledTimes = config.scheduledTimes || {};
+                    TOTAL_SESSION_TIME = config.sessionDuration * 60 * 1000;
+                    MS5 = config.alarmInterval * 60 * 1000;
+                    FINISH_WINDOW_MIN = config.finishWindow || 5;
+                    MAX_PEOPLE_PER_LINE = config.maxPeople || 4;
+                    BLINK_TIME_MIN = config.blinkTime || 5;
+                    currentRole = config.currentRole || 'admin';
+                    document.getElementById('userRole').value = currentRole;
+                    document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
+                    document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE;
+                    document.getElementById('blinkTime').value = BLINK_TIME_MIN;
+                    document.getElementById('sessionDuration').value = config.sessionDuration;
+                    document.getElementById('alarmInterval').value = config.alarmInterval;
+                    updateLineConfigs();
+                    updateTimers();
+                    updateUIBasedOnRole();
+                } else {
+                    currentRole = 'admin';
+                    document.getElementById('userRole').value = currentRole;
+                    updateUIBasedOnRole();
+                }
+            } catch (error) {
+                console.error('Error loading state:', error);
             }
         }
 
-        // Save current state
-        function saveState() {
+        async function saveState() {
             const config = {
                 lineConfigs,
                 scheduledTimes,
@@ -1138,7 +1132,17 @@
                 blinkTime: parseInt(document.getElementById('blinkTime').value),
                 currentRole: currentRole
             };
-            localStorage.setItem('speedChatConfig', JSON.stringify(config));
+            try {
+                await fetch('http://localhost:5001/state', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+            } catch (error) {
+                console.error('Error saving state:', error);
+            }
         }
 
         // Add a flag to track when settings are being updated
