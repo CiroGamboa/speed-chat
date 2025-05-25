@@ -64,7 +64,7 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)
     # Emit the new state to all connected clients
-    socketio.emit("state_update", state)
+    socketio.emit("state_update", state, broadcast=True, namespace="/")
     logger.debug("State update emitted to all clients")
 
 
@@ -87,12 +87,20 @@ def update_state():
 def handle_connect():
     logger.info("Client connected")
     # Send current state to newly connected client
-    socketio.emit("state_update", load_state())
+    socketio.emit("state_update", load_state(), namespace="/")
+    logger.debug("Initial state sent to client")
 
 
 @socketio.on("disconnect")
 def handle_disconnect():
     logger.info("Client disconnected")
+
+
+@socketio.on("get_state")
+def handle_get_state():
+    logger.info("Received get_state request")
+    socketio.emit("state_update", load_state(), namespace="/")
+    logger.debug("State sent in response to get_state request")
 
 
 if __name__ == "__main__":
