@@ -991,6 +991,7 @@
                 FINISH_WINDOW_MIN = 5;
                 MAX_PEOPLE_PER_LINE = 4;
                 BLINK_TIME_MIN = 5;
+                currentRole = 'admin';  // Reset role to admin
 
                 // Reset form values
                 document.getElementById('sessionDuration').value = '30';
@@ -998,6 +999,7 @@
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
                 document.getElementById('maxPeople').value = '4';
                 document.getElementById('blinkTime').value = '5';
+                document.getElementById('userRole').value = currentRole;  // Reset role selector
 
                 // Clear timers container
                 document.getElementById('timers-container').innerHTML = '';
@@ -1007,6 +1009,9 @@
 
                 // Hide notification if visible
                 document.getElementById('changeSeatNotification').style.display = 'none';
+
+                // Update UI based on role
+                updateUIBasedOnRole();
             }
         }
 
@@ -1022,6 +1027,11 @@
                 FINISH_WINDOW_MIN = config.finishWindow || 5;
                 MAX_PEOPLE_PER_LINE = config.maxPeople || 4;
                 BLINK_TIME_MIN = config.blinkTime || 5;
+                currentRole = config.currentRole || 'admin';  // Load saved role or default to admin
+
+                // Set the role selector to the saved role
+                document.getElementById('userRole').value = currentRole;
+
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
                 document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE;
                 document.getElementById('blinkTime').value = BLINK_TIME_MIN;
@@ -1033,6 +1043,12 @@
                 // Update UI
                 updateLineConfigs();
                 updateTimers();
+                updateUIBasedOnRole();  // Add this line to update UI based on saved role
+            } else {
+                // If no saved state, initialize with default values
+                currentRole = 'admin';
+                document.getElementById('userRole').value = currentRole;
+                updateUIBasedOnRole();
             }
         }
 
@@ -1045,7 +1061,8 @@
                 alarmInterval: parseInt(document.getElementById('alarmInterval').value),
                 finishWindow: parseInt(document.getElementById('finishWindow').value),
                 maxPeople: parseInt(document.getElementById('maxPeople').value),
-                blinkTime: parseInt(document.getElementById('blinkTime').value)
+                blinkTime: parseInt(document.getElementById('blinkTime').value),
+                currentRole: currentRole
             };
             localStorage.setItem('speedChatConfig', JSON.stringify(config));
         }
@@ -1473,9 +1490,11 @@
                     formButtons.style.display = 'block';
                     resetBtn.style.display = 'block';
 
-                    // Enable all inputs and buttons
+                    // Enable all inputs and buttons except role selector
                     document.querySelectorAll('input, select, button').forEach(element => {
-                        element.disabled = false;
+                        if (!element.closest('.role-selector')) {
+                            element.disabled = false;
+                        }
                     });
                 } else if (currentRole === 'dispatcher') {
                     // Dispatcher can only see people management
@@ -1484,9 +1503,9 @@
                     formButtons.style.display = 'none';
                     resetBtn.style.display = 'none';
 
-                    // Disable all inputs and buttons except for people management
+                    // Disable all inputs and buttons except for people management and role selector
                     document.querySelectorAll('input, select, button').forEach(element => {
-                        if (element.closest('.people-management')) {
+                        if (element.closest('.people-management') || element.closest('.role-selector')) {
                             element.disabled = false;
                         } else {
                             element.disabled = true;
@@ -1497,6 +1516,9 @@
 
             // Update line configs to reflect new permissions
             updateLineConfigs();
+
+            // Save the state after updating the role
+            saveState();
 
             // Reset flag after a short delay to ensure all updates are complete
             setTimeout(() => {
