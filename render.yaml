@@ -3,7 +3,7 @@ services:
     name: speed-chat-backend
     env: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn backend.app:app
+    startCommand: gunicorn -w 2 -k eventlet backend/app.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0 
