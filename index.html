@@ -172,6 +172,7 @@
 
         .config-content.visible {
             display: block;
+            overflow: visible;
         }
 
         .config-header.open {
@@ -209,6 +210,52 @@
             margin-bottom: 0.5rem;
             font-weight: bold;
             color: #8f0057;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tooltip-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ff97d7;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: help;
+            position: relative;
+        }
+
+        .tooltip-icon:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(100% + 5px);
+            padding: 8px 12px;
+            background: #8f0057;
+            color: white;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: normal;
+            white-space: nowrap;
+            z-index: 2002;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .tooltip-icon:hover::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(100% - 5px);
+            border-width: 5px;
+            border-style: solid;
+            border-color: #8f0057 transparent transparent transparent;
         }
 
         .global-settings select {
@@ -759,7 +806,10 @@
         </div>
         <div class="config-content" id="configContent">
             <div class="global-settings">
-                <label for="sessionDuration">Session Duration:</label>
+                <label>
+                    Session Duration
+                    <span class="tooltip-icon" data-tooltip="How long each speed chat session will last">?</span>
+                </label>
                 <select id="sessionDuration">
                     <option value="10">10 minutes</option>
                     <option value="15">15 minutes</option>
@@ -774,7 +824,11 @@
                     <option value="60">60 minutes</option>
                 </select>
 
-                <label for="alarmInterval">Alarm Interval:</label>
+                <label>
+                    Alarm Interval
+                    <span class="tooltip-icon"
+                        data-tooltip="How often the alarm will sound to remind people to change seats">?</span>
+                </label>
                 <select id="alarmInterval">
                     <option value="1">1 minute</option>
                     <option value="2">2 minutes</option>
@@ -788,7 +842,11 @@
                     <option value="10">10 minutes</option>
                 </select>
 
-                <label for="finishWindow">Finish Window:</label>
+                <label>
+                    Finish Window
+                    <span class="tooltip-icon"
+                        data-tooltip="How many minutes before the end when people should start moving to the lobby">?</span>
+                </label>
                 <select id="finishWindow">
                     <option value="1">1 minute</option>
                     <option value="2">2 minutes</option>
@@ -802,7 +860,11 @@
                     <option value="10">10 minutes</option>
                 </select>
 
-                <label for="maxPeople">Maximum People per Line:</label>
+                <label>
+                    Maximum People per Line
+                    <span class="tooltip-icon"
+                        data-tooltip="Maximum number of people that can be registered in each line">?</span>
+                </label>
                 <select id="maxPeople">
                     <option value="4">4 people</option>
                     <option value="6">6 people</option>
@@ -815,7 +877,11 @@
                     <option value="20">20 people</option>
                 </select>
 
-                <label for="blinkTime">Blink Before Start:</label>
+                <label>
+                    Blink Before Start
+                    <span class="tooltip-icon"
+                        data-tooltip="How many minutes before start time the timer will start blinking">?</span>
+                </label>
                 <select id="blinkTime">
                     <option value="1">1 minute</option>
                     <option value="2">2 minutes</option>
