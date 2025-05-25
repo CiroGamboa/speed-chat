@@ -2,8 +2,9 @@ services:
   - type: web
     name: speed-chat-backend
     env: python
+    rootDir: .
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn -w 2 -k eventlet backend/app.py
+    startCommand: cd backend && gunicorn -w 2 -k eventlet app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0 
