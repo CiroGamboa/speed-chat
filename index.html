@@ -1431,7 +1431,7 @@
 
             document.querySelectorAll('.timer').forEach(timer => {
                 const line = timer.dataset.line;
-                let lastBellTime = 0;
+                let lastBellTime = null;
                 const label = timer.querySelector('.label');
                 const countElement = timer.querySelector('.count');
                 const timerContainer = timer.closest('.timer-container');
@@ -1516,7 +1516,9 @@
                             // Only trigger alarm if the timer is actually running and we've passed an interval
                             if (status === 'active') {
                                 const currentInterval = Math.floor(elapsed / MS5);
-                                if (currentInterval > lastBellTime) {
+                                if (lastBellTime === null) {
+                                    lastBellTime = currentInterval;
+                                } else if (currentInterval > lastBellTime) {
                                     // Only play alarm if we're not in the middle of updating UI or settings
                                     if (!isUpdatingUI && !window.isUpdatingSettings) {
                                         showChangeSeatNotification();
