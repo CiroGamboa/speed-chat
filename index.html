@@ -3,32 +3,241 @@
 
 <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Speed Chat Timers</title>
     <style>
         body {
             font-family: sans-serif;
             background: #fafafa;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
+            margin: 0;
+            padding: 1rem;
             color: #4a4949;
+            font-size: 16px;
         }
 
         .timer {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 200px;
-            margin: 1rem;
-            padding: 1rem;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 1rem;
+            padding: 1.5rem;
             border-radius: 8px;
             background: #fff;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
             border: 2px solid #ff97d7;
-            height: 120px;
-            vertical-align: top;
+            height: auto;
+            min-height: 120px;
+        }
+
+        .timer .label {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .timer .count {
+            font-size: 3rem;
+        }
+
+        .config-section {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            display: none;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .config-section.visible {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .config-header {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 2000;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+            border: 2px solid #ff97d7;
+        }
+
+        .config-header:hover {
+            transform: rotate(45deg);
+            background: #ff97d7;
+        }
+
+        .config-header.open {
+            background: #ff97d7;
+        }
+
+        .gear-icon {
+            width: 24px;
+            height: 24px;
+            stroke: #8f0057;
+            stroke-width: 2;
+            pointer-events: none;
+        }
+
+        .close-config {
+            display: none;
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 2001;
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .config-content {
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 2rem 1rem 1rem;
+            box-sizing: border-box;
+            z-index: 1001;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            background: #fff;
+            display: none;
+        }
+
+        .config-content.visible {
+            display: block;
+        }
+
+        /* Mobile styles */
+        @media (max-width: 767px) {
+            .config-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 1999;
+                display: block !important;
+                background: transparent;
+                /* Remove dark background by default */
+            }
+
+            .config-section.visible {
+                display: flex !important;
+                background: rgba(0, 0, 0, 0.5);
+                /* Add dark background only when visible */
+            }
+
+            .config-content.visible {
+                display: block;
+            }
+
+            .close-config {
+                display: block;
+            }
+
+            .config-header {
+                position: fixed;
+                top: 1rem;
+                right: 1rem;
+                width: 48px;
+                height: 48px;
+                z-index: 3000;
+                display: flex !important;
+                background: #fff;
+                border: 2px solid #ff97d7;
+                pointer-events: auto;
+            }
+
+            .gear-icon {
+                width: 24px;
+                height: 24px;
+                stroke: #8f0057;
+                stroke-width: 2;
+                pointer-events: none;
+            }
+        }
+
+        /* Desktop styles */
+        @media (min-width: 768px) {
+            .config-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: none;
+                display: block;
+                z-index: 1999;
+            }
+
+            .config-section.visible {
+                display: block;
+            }
+
+            .config-header {
+                position: fixed;
+                top: 1rem;
+                right: 1rem;
+                width: 48px;
+                height: 48px;
+                z-index: 2000;
+                display: flex !important;
+            }
+
+            .config-content {
+                position: fixed;
+                top: 5rem;
+                right: 1rem;
+                width: 400px;
+                height: auto;
+                max-height: calc(100vh - 6rem);
+                border-radius: 8px;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+                padding: 1.5rem;
+                background: #fff;
+                z-index: 1999;
+            }
+
+            .close-config {
+                display: none;
+            }
+
+            /* Adjust form elements for wider panel */
+            .global-settings {
+                margin-bottom: 1.5rem;
+                padding: 1.5rem;
+            }
+
+            .line-config {
+                padding: 1rem;
+            }
+
+            .line-fields {
+                gap: 1rem;
+            }
+
+            .people-management {
+                padding: 1rem;
+            }
         }
 
         .timer-container {
@@ -93,22 +302,6 @@
             color: #ff97d7 !important;
         }
 
-        .timer .label {
-            font-size: 1.3rem;
-            margin-bottom: 0.5rem;
-            color: #8f0057;
-            height: 1.5rem;
-        }
-
-        .timer .count {
-            font-size: 2.7rem;
-            font-weight: bold;
-            color: #4a4949;
-            height: 2.5rem;
-            line-height: 2.5rem;
-            margin-top: 0.5rem;
-        }
-
         .timer .count.starting-text {
             font-size: 1.3rem;
             font-weight: 600;
@@ -133,67 +326,6 @@
             font-size: 1.3rem;
             font-weight: bold;
             color: #fff;
-        }
-
-        .config-section {
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
-            z-index: 1000;
-        }
-
-        .config-header {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            cursor: pointer;
-            padding: 0;
-            margin-bottom: 1rem;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
-
-        .config-content {
-            display: none;
-            background: #fff;
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            width: 300px;
-            max-height: calc(100vh - 4rem);
-            overflow-y: auto;
-            border: 2px solid #ff97d7;
-            position: fixed;
-            top: 4rem;
-            right: 1rem;
-            z-index: 1001;
-        }
-
-        .config-content.visible {
-            display: block;
-        }
-
-        .config-header.open {
-            background: #ff97d7;
-            padding: 0.5rem;
-            border-radius: 4px;
-        }
-
-        .gear-icon {
-            width: 36px;
-            height: 36px;
-            cursor: pointer;
-            transition: transform 0.3s ease;
-            stroke: #4a4949;
-        }
-
-        .config-header.open .gear-icon {
-            stroke: #8f0057;
-        }
-
-        .gear-icon:hover {
-            transform: rotate(45deg);
         }
 
         .global-settings {
@@ -461,116 +593,9 @@
             margin: 0 -1rem;
         }
 
-        @media (max-width: 1200px) {
-            body {
-                padding: 1rem;
-                font-size: 20px;
-            }
-
-            #timers-container {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 2rem;
-                margin: 0;
-                padding: 0.5rem;
-            }
-
+        @media (min-width: 1200px) {
             .timer {
-                width: 100%;
-                max-width: 400px;
-                margin: 0;
-                height: 220px;
-                padding: 2.5rem;
-                border-width: 4px;
-            }
-
-            .timer .label {
-                font-size: 2.2rem;
-                margin-bottom: 2rem;
-                height: 2.5rem;
-            }
-
-            .timer .count {
-                font-size: 5rem;
-                height: 5.5rem;
-                line-height: 5.5rem;
-            }
-
-            .logo-container {
-                width: 240px;
-                height: 240px;
-                margin: 0 auto 2.5rem;
-            }
-
-            h1 {
-                font-size: 3rem;
-                margin-bottom: 2.5rem;
-            }
-
-            .gear-icon {
-                width: 48px;
-                height: 48px;
-                stroke-width: 3;
-            }
-
-            .notification {
-                width: 95%;
-                max-width: 500px;
-                padding: 2.5rem;
-                font-size: 2.5rem;
-            }
-        }
-
-        @media (max-width: 600px) {
-            .gear-icon {
-                width: 64px;
-                height: 64px;
-                stroke-width: 3.5;
-            }
-
-            .config-section {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                z-index: 2000;
-                display: flex;
-                flex-direction: column;
-                align-items: flex-end;
-            }
-
-            .config-content {
-                width: 100%;
-                height: 100%;
-                max-width: 100vw;
-                max-height: 100vh;
-                border-radius: 0;
-                box-shadow: none;
-                padding: 2.5rem 1rem 1rem 1rem;
-                box-sizing: border-box;
-                z-index: 2001;
-                display: block;
-            }
-        }
-
-        @media (max-width: 900px) {
-            .config-content {
-                width: 100vw;
-                height: 100vh;
-                max-width: 100vw;
-                max-height: 100vh;
-                border-radius: 0;
-                box-shadow: none;
-                top: 0;
-                left: 0;
-                right: 0;
-                padding: 2.5rem 1rem 1rem 1rem;
-                box-sizing: border-box;
-                z-index: 2001;
-                overflow-y: auto;
-                -webkit-overflow-scrolling: touch;
+                width: 200px;
             }
         }
 
@@ -611,14 +636,6 @@
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
-        }
-
-        @media (max-width: 900px) {
-            .form-buttons {
-                padding: 1rem;
-                background: #fff;
-                box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-            }
         }
 
         .line-config {
@@ -870,7 +887,8 @@
         Change seat, go to the left
     </div>
 
-    <div class="config-section">
+    <div class="config-section" id="configSection">
+        <button class="close-config" onclick="toggleConfig()">Close</button>
         <div class="config-header" onclick="toggleConfig()">
             <svg class="gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
@@ -1184,11 +1202,39 @@
         }
 
         function toggleConfig() {
+            const section = document.getElementById('configSection');
             const content = document.getElementById('configContent');
             const header = document.querySelector('.config-header');
+            const closeBtn = document.querySelector('.close-config');
+
+            section.classList.toggle('visible');
             content.classList.toggle('visible');
             header.classList.toggle('open');
+
+            // Show/hide close button based on screen size
+            if (window.innerWidth < 768) {
+                closeBtn.style.display = section.classList.contains('visible') ? 'block' : 'none';
+            }
         }
+
+        // Add resize handler to manage close button visibility
+        window.addEventListener('resize', function () {
+            const section = document.getElementById('configSection');
+            const closeBtn = document.querySelector('.close-config');
+            if (window.innerWidth >= 768) {
+                closeBtn.style.display = 'none';
+            } else if (section.classList.contains('visible')) {
+                closeBtn.style.display = 'block';
+            }
+        });
+
+        // Initialize config section state
+        document.addEventListener('DOMContentLoaded', function () {
+            const section = document.getElementById('configSection');
+            const content = document.getElementById('configContent');
+            section.classList.remove('visible');
+            content.classList.remove('visible');
+        });
 
         function addLineConfig() {
             // Find the highest existing line number
@@ -1606,9 +1652,17 @@
             const formButtons = document.querySelector('.form-buttons');
             const resetBtn = document.querySelector('.reset-btn');
 
-            // Hide all config elements for viewer
+            // Check if we're on mobile
+            const isMobile = window.innerWidth <= 767;
+
+            // Hide all config elements for viewer, but keep gear icon visible on mobile
             if (currentRole === 'viewer') {
-                configSection.style.display = 'none';
+                if (isMobile) {
+                    configSection.style.display = 'block';
+                    configContent.style.display = 'none';
+                } else {
+                    configSection.style.display = 'none';
+                }
             } else {
                 // Show config section for admin and dispatcher
                 configSection.style.display = 'block';
