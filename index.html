@@ -161,18 +161,17 @@
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             width: 300px;
-            max-height: calc(100vh - 2rem);
+            max-height: calc(100vh - 4rem);
             overflow-y: auto;
             border: 2px solid #ff97d7;
-            position: absolute;
-            top: 100%;
-            right: 0;
+            position: fixed;
+            top: 4rem;
+            right: 1rem;
             z-index: 1001;
         }
 
         .config-content.visible {
             display: block;
-            overflow: visible;
         }
 
         .config-header.open {
@@ -557,16 +556,6 @@
         }
 
         @media (max-width: 900px) {
-            .config-section {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                z-index: 2000;
-                background: rgba(0, 0, 0, 0.5);
-            }
-
             .config-content {
                 width: 100vw;
                 height: 100vh;
@@ -582,40 +571,6 @@
                 z-index: 2001;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
-            }
-
-            .config-header {
-                position: fixed;
-                top: 1rem;
-                right: 1rem;
-                z-index: 2002;
-            }
-
-            .timer {
-                width: 100%;
-                max-width: 400px;
-                margin: 0;
-                height: 220px;
-                padding: 2.5rem;
-                border-width: 4px;
-                border-radius: 12px;
-            }
-
-            .timer .label {
-                font-size: 2.5rem;
-                margin-bottom: 2rem;
-                height: 2.5rem;
-            }
-
-            .timer .count {
-                font-size: 5rem;
-                height: 5.5rem;
-                line-height: 5.5rem;
-            }
-
-            .logo-container {
-                border-width: 4px;
-                border-color: #8f0057;
             }
         }
 
