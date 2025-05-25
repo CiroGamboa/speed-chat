@@ -791,10 +791,46 @@
         .timer.blinking .count {
             color: inherit;
         }
+
+        .role-selector {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1000;
+            background: #fff;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            border: 2px solid #ff97d7;
+        }
+
+        .role-selector select {
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            color: #4a4949;
+            width: 100%;
+        }
+
+        .role-selector label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #8f0057;
+        }
     </style>
 </head>
 
 <body>
+    <div class="role-selector">
+        <label>Select Role:</label>
+        <select id="userRole" onchange="updateUIBasedOnRole()">
+            <option value="admin">Admin</option>
+            <option value="dispatcher">Dispatcher</option>
+            <option value="viewer">Viewer</option>
+        </select>
+    </div>
+
     <div class="logo-container">
         <img src="logo.png" alt="Speed Chat Logo" class="logo">
     </div>
@@ -933,6 +969,8 @@
         let FINISH_WINDOW_MIN = 5;
         let MAX_PEOPLE_PER_LINE = 4;
         let BLINK_TIME_MIN = 5;
+        let currentRole = 'admin';
+        let isUpdatingUI = false;  // Add flag for UI updates
 
         // Get the duration of the alarm sound
         let alarmDuration = 0;
@@ -1066,8 +1104,9 @@
                         <input type="text" 
                                value="${config.name}" 
                                onchange="updateLineName(${config.id}, this.value)"
-                               placeholder="Line name">
-                        <select id="time${config.id}" required>
+                               placeholder="Line name"
+                               ${currentRole !== 'admin' ? 'disabled' : ''}>
+                        <select id="time${config.id}" required ${currentRole !== 'admin' ? 'disabled' : ''}>
                             ${generateTimeOptions().map(time =>
                 `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
             ).join('')}
@@ -1081,22 +1120,28 @@
                             ${(config.people || []).map(person => `
                                 <div class="person-entry">
                                     <span>${person.name}</span>
-                                    <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                    ${currentRole !== 'viewer' ? `
+                                        <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                    ` : ''}
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="add-person">
-                            <input type="text" 
-                                   id="newPerson${config.id}" 
-                                   placeholder="Add person's name"
-                                   onkeypress="handlePersonInput(event, ${config.id})">
-                            <button type="button" onclick="addPerson(${config.id})">Add</button>
+                        ${currentRole !== 'viewer' ? `
+                            <div class="add-person">
+                                <input type="text" 
+                                       id="newPerson${config.id}" 
+                                       placeholder="Add person's name"
+                                       onkeypress="handlePersonInput(event, ${config.id})">
+                                <button type="button" onclick="addPerson(${config.id})">Add</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    ${currentRole === 'admin' ? `
+                        <div class="line-buttons">
+                            <button type="button" onclick="updateLineTime(${config.id})">Update</button>
+                            <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
                         </div>
-                    </div>
-                    <div class="line-buttons">
-                        <button type="button" onclick="updateLineTime(${config.id})">Update</button>
-                        <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
-                    </div>
+                    ` : ''}
                 </div>
             `).join('');
         }
@@ -1302,8 +1347,8 @@
                             if (status === 'active') {
                                 const currentInterval = Math.floor(elapsed / MS5);
                                 if (currentInterval > lastBellTime) {
-                                    // Only play alarm if we're not in the middle of updating settings
-                                    if (!window.isUpdatingSettings) {
+                                    // Only play alarm if we're not in the middle of updating UI or settings
+                                    if (!isUpdatingUI && !window.isUpdatingSettings) {
                                         showChangeSeatNotification();
                                     }
                                     lastBellTime = currentInterval;
@@ -1320,6 +1365,9 @@
         }
 
         function addPerson(lineId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
             const config = lineConfigs.find(c => c.id === lineId);
             if (!config) return;
 
@@ -1337,9 +1385,17 @@
                 updateTimers();
                 saveState();
             }
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
         }
 
         function removePerson(lineId, personId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
             const config = lineConfigs.find(c => c.id === lineId);
             if (!config || !config.people) return;
 
@@ -1347,6 +1403,11 @@
             updateLineConfigs();
             updateTimers();
             saveState();
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
         }
 
         function handlePersonInput(event, lineId) {
@@ -1386,8 +1447,67 @@
             updateTimers();
         });
 
+        // Function to update UI based on role
+        function updateUIBasedOnRole() {
+            isUpdatingUI = true;  // Set flag before UI update
+            currentRole = document.getElementById('userRole').value;
+            const configSection = document.querySelector('.config-section');
+            const configContent = document.getElementById('configContent');
+            const globalSettings = document.querySelector('.global-settings');
+            const addLineBtn = document.querySelector('.add-line-btn');
+            const formButtons = document.querySelector('.form-buttons');
+            const resetBtn = document.querySelector('.reset-btn');
+
+            // Hide all config elements for viewer
+            if (currentRole === 'viewer') {
+                configSection.style.display = 'none';
+            } else {
+                // Show config section for admin and dispatcher
+                configSection.style.display = 'block';
+
+                // Show/hide elements based on role
+                if (currentRole === 'admin') {
+                    // Admin can see everything
+                    globalSettings.style.display = 'block';
+                    addLineBtn.style.display = 'block';
+                    formButtons.style.display = 'block';
+                    resetBtn.style.display = 'block';
+
+                    // Enable all inputs and buttons
+                    document.querySelectorAll('input, select, button').forEach(element => {
+                        element.disabled = false;
+                    });
+                } else if (currentRole === 'dispatcher') {
+                    // Dispatcher can only see people management
+                    globalSettings.style.display = 'none';
+                    addLineBtn.style.display = 'none';
+                    formButtons.style.display = 'none';
+                    resetBtn.style.display = 'none';
+
+                    // Disable all inputs and buttons except for people management
+                    document.querySelectorAll('input, select, button').forEach(element => {
+                        if (element.closest('.people-management')) {
+                            element.disabled = false;
+                        } else {
+                            element.disabled = true;
+                        }
+                    });
+                }
+            }
+
+            // Update line configs to reflect new permissions
+            updateLineConfigs();
+
+            // Reset flag after a short delay to ensure all updates are complete
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
         // Load saved state when page loads
         loadSavedState();
+        // Initialize UI based on role
+        updateUIBasedOnRole();
     </script>
 </body>
 
