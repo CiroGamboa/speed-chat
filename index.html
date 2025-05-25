@@ -1032,7 +1032,7 @@
         <!-- Timers will be added here -->
     </div>
 
-    <audio id="bell" src="alarm.mp3"></audio>
+    <audio id="bell" src="alarm.mp3" preload="auto"></audio>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
@@ -1048,10 +1048,33 @@
         let currentRole = 'admin';
         let isUpdatingUI = false;
         let alarmDuration = 0;
+        let audioEnabled = false;
 
-        // Get the duration of the alarm sound
-        bell.addEventListener('loadedmetadata', function () {
+        // Enable audio on first user interaction
+        document.addEventListener('click', function enableAudio() {
+            if (!audioEnabled) {
+                audioEnabled = true;
+                // Try to play and immediately pause to enable audio
+                bell.play().then(() => {
+                    bell.pause();
+                    bell.currentTime = 0;
+                    console.log('Audio enabled successfully');
+                }).catch(error => {
+                    console.error('Error enabling audio:', error);
+                });
+                // Remove the event listener after first interaction
+                document.removeEventListener('click', enableAudio);
+            }
+        }, { once: true });
+
+        // Get the duration of the alarm sound and ensure it's loaded
+        bell.addEventListener('loadeddata', function () {
+            console.log('Alarm sound loaded successfully');
             alarmDuration = bell.duration * 1000; // Convert to milliseconds
+        });
+
+        bell.addEventListener('error', function (e) {
+            console.error('Error loading alarm sound:', e);
         });
 
         // Connect to WebSocket server
@@ -1340,21 +1363,44 @@
             const notification = document.getElementById('changeSeatNotification');
             const overlay = document.getElementById('notificationOverlay');
 
-            // Play the alarm sound first
-            bell.currentTime = 0;
-            bell.play().catch(error => {
-                console.error('Error playing alarm:', error);
-            });
-
-            // Then show the notification and overlay
+            // Show the notification and overlay first
             notification.style.display = 'block';
             overlay.style.display = 'block';
 
-            // Hide notification and overlay after the alarm duration
-            setTimeout(() => {
-                notification.style.display = 'none';
-                overlay.style.display = 'none';
-            }, alarmDuration);
+            // Only try to play sound if audio is enabled
+            if (audioEnabled) {
+                // Reset and play the alarm sound
+                bell.currentTime = 0;
+
+                // Try to play the sound
+                const playPromise = bell.play();
+
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log('Alarm sound started playing');
+                        // When the alarm finishes playing, hide the notification
+                        bell.addEventListener('ended', () => {
+                            console.log('Alarm sound finished playing');
+                            notification.style.display = 'none';
+                            overlay.style.display = 'none';
+                        }, { once: true });
+                    }).catch(error => {
+                        console.error('Error playing alarm:', error);
+                        // If there's an error playing the sound, hide the notification after 3 seconds
+                        setTimeout(() => {
+                            notification.style.display = 'none';
+                            overlay.style.display = 'none';
+                        }, 3000);
+                    });
+                }
+            } else {
+                // If audio is not enabled, just show the notification for 3 seconds
+                console.log('Audio not enabled yet, showing notification without sound');
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                    overlay.style.display = 'none';
+                }, 3000);
+            }
         }
 
         function updateTimers() {
