@@ -11,8 +11,18 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS
-socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+CORS(
+    app, resources={r"/*": {"origins": "*"}}
+)  # Enable CORS with more specific configuration
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    logger=True,
+    engineio_logger=True,
+    async_mode="eventlet",
+    ping_timeout=60,
+    ping_interval=25,
+)
 STATE_FILE = os.path.join(os.path.dirname(__file__), "state.json")
 
 
@@ -86,5 +96,5 @@ def handle_disconnect():
 
 
 if __name__ == "__main__":
-    logger.info("Starting server on port 5001")
-    socketio.run(app, host="0.0.0.0", port=5001, debug=True)
+    logger.info("Starting server on port 8080")
+    socketio.run(app, host="0.0.0.0", port=8080, debug=True)
