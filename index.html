@@ -778,15 +778,12 @@
         }
 
         .role-selector {
-            position: fixed;
-            top: 1rem;
-            left: 1rem;
-            z-index: 1000;
             background: #fff;
-            padding: 1rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            border: 2px solid #ff97d7;
+            padding: 0;
+            border-radius: 4px;
+            border: none;
+            margin-bottom: 1.5rem;
+            width: 100%;
         }
 
         .role-selector select {
@@ -881,15 +878,6 @@
         </div>
     </div>
 
-    <div class="role-selector">
-        <label>Select Role:</label>
-        <select id="userRole" onchange="updateUIBasedOnRole()">
-            <option value="admin">Admin</option>
-            <option value="dispatcher">Dispatcher</option>
-            <option value="viewer">Viewer</option>
-        </select>
-    </div>
-
     <div class="logo-container">
         <img src="logo.png" alt="Speed Chat Logo" class="logo">
     </div>
@@ -909,6 +897,14 @@
             </svg>
         </div>
         <div class="config-content" id="configContent">
+            <div class="role-selector">
+                <label>Select Role:</label>
+                <select id="userRole" onchange="updateUIBasedOnRole()">
+                    <option value="admin">Admin</option>
+                    <option value="dispatcher">Dispatcher</option>
+                    <option value="viewer">Viewer</option>
+                </select>
+            </div>
             <div class="global-settings">
                 <label>
                     Session Duration
@@ -1640,58 +1636,34 @@
         function updateUIBasedOnRole() {
             isUpdatingUI = true;  // Set flag before UI update
             currentRole = document.getElementById('userRole').value;
-            const configSection = document.querySelector('.config-section');
             const configContent = document.getElementById('configContent');
-            const globalSettings = document.querySelector('.global-settings');
-            const addLineBtn = document.querySelector('.add-line-btn');
-            const formButtons = document.querySelector('.form-buttons');
-            const resetBtn = document.querySelector('.reset-btn');
+            const roleSelector = configContent.querySelector('.role-selector');
+            const globalSettings = configContent.querySelector('.global-settings');
+            const addLineBtn = configContent.querySelector('.add-line-btn');
+            const formButtons = configContent.querySelector('.form-buttons');
+            const linesContainer = document.getElementById('linesContainer');
 
-            // Check if we're on mobile
-            const isMobile = window.innerWidth <= 767;
-
-            // Hide all config elements for viewer, but keep gear icon visible on mobile
             if (currentRole === 'viewer') {
-                if (isMobile) {
-                    configSection.style.display = 'block';
-                    configContent.style.display = 'none';
-                } else {
-                    configSection.style.display = 'none';
-                }
+                // Only show the role selector
+                roleSelector.style.display = 'block';
+                globalSettings.style.display = 'none';
+                addLineBtn.style.display = 'none';
+                formButtons.style.display = 'none';
+                linesContainer.style.display = 'none';
+            } else if (currentRole === 'dispatcher') {
+                // Show only the role selector and line configs
+                roleSelector.style.display = 'block';
+                globalSettings.style.display = 'none';
+                addLineBtn.style.display = 'none';
+                formButtons.style.display = 'none';
+                linesContainer.style.display = 'block';
             } else {
-                // Show config section for admin and dispatcher
-                configSection.style.display = 'block';
-
-                // Show/hide elements based on role
-                if (currentRole === 'admin') {
-                    // Admin can see everything
-                    globalSettings.style.display = 'block';
-                    addLineBtn.style.display = 'block';
-                    formButtons.style.display = 'block';
-                    resetBtn.style.display = 'block';
-
-                    // Enable all inputs and buttons except role selector
-                    document.querySelectorAll('input, select, button').forEach(element => {
-                        if (!element.closest('.role-selector')) {
-                            element.disabled = false;
-                        }
-                    });
-                } else if (currentRole === 'dispatcher') {
-                    // Dispatcher can only see people management
-                    globalSettings.style.display = 'none';
-                    addLineBtn.style.display = 'none';
-                    formButtons.style.display = 'none';
-                    resetBtn.style.display = 'none';
-
-                    // Disable all inputs and buttons except for people management and role selector
-                    document.querySelectorAll('input, select, button').forEach(element => {
-                        if (element.closest('.people-management') || element.closest('.role-selector')) {
-                            element.disabled = false;
-                        } else {
-                            element.disabled = true;
-                        }
-                    });
-                }
+                // Show all config elements (admin)
+                roleSelector.style.display = 'block';
+                globalSettings.style.display = 'block';
+                addLineBtn.style.display = 'block';
+                formButtons.style.display = 'block';
+                linesContainer.style.display = 'block';
             }
 
             // Update line configs to reflect new permissions
