@@ -707,6 +707,35 @@
             color: #8f0057;
             margin-top: 0.25rem;
         }
+
+        .timer.blinking {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% {
+                background: #fff;
+                color: #4a4949;
+            }
+
+            50% {
+                background: #8f0057;
+                color: #fff;
+            }
+
+            100% {
+                background: #fff;
+                color: #4a4949;
+            }
+        }
+
+        .timer.blinking .label {
+            color: inherit;
+        }
+
+        .timer.blinking .count {
+            color: inherit;
+        }
     </style>
 </head>
 
@@ -785,6 +814,20 @@
                     <option value="18">18 people</option>
                     <option value="20">20 people</option>
                 </select>
+
+                <label for="blinkTime">Blink Before Start:</label>
+                <select id="blinkTime">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="3">3 minutes</option>
+                    <option value="4">4 minutes</option>
+                    <option value="5" selected>5 minutes</option>
+                    <option value="6">6 minutes</option>
+                    <option value="7">7 minutes</option>
+                    <option value="8">8 minutes</option>
+                    <option value="9">9 minutes</option>
+                    <option value="10">10 minutes</option>
+                </select>
             </div>
 
             <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
@@ -814,6 +857,7 @@
         let TOTAL_SESSION_TIME = 30 * 60 * 1000;
         let FINISH_WINDOW_MIN = 5;
         let MAX_PEOPLE_PER_LINE = 4;
+        let BLINK_TIME_MIN = 5;
 
         // Get the duration of the alarm sound
         let alarmDuration = 0;
@@ -833,12 +877,14 @@
                 MS5 = 5 * 60 * 1000;
                 FINISH_WINDOW_MIN = 5;
                 MAX_PEOPLE_PER_LINE = 4;
+                BLINK_TIME_MIN = 5;
 
                 // Reset form values
                 document.getElementById('sessionDuration').value = '30';
                 document.getElementById('alarmInterval').value = '5';
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
                 document.getElementById('maxPeople').value = '4';
+                document.getElementById('blinkTime').value = '5';
 
                 // Clear timers container
                 document.getElementById('timers-container').innerHTML = '';
@@ -862,8 +908,10 @@
                 MS5 = config.alarmInterval * 60 * 1000;
                 FINISH_WINDOW_MIN = config.finishWindow || 5;
                 MAX_PEOPLE_PER_LINE = config.maxPeople || 4;
+                BLINK_TIME_MIN = config.blinkTime || 5;
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
                 document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE;
+                document.getElementById('blinkTime').value = BLINK_TIME_MIN;
 
                 // Restore form values
                 document.getElementById('sessionDuration').value = config.sessionDuration;
@@ -883,7 +931,8 @@
                 sessionDuration: parseInt(document.getElementById('sessionDuration').value),
                 alarmInterval: parseInt(document.getElementById('alarmInterval').value),
                 finishWindow: parseInt(document.getElementById('finishWindow').value),
-                maxPeople: parseInt(document.getElementById('maxPeople').value)
+                maxPeople: parseInt(document.getElementById('maxPeople').value),
+                blinkTime: parseInt(document.getElementById('blinkTime').value)
             };
             localStorage.setItem('speedChatConfig', JSON.stringify(config));
         }
@@ -891,6 +940,7 @@
         function updateTimingSettings() {
             const sessionMinutes = parseInt(document.getElementById('sessionDuration').value);
             const alarmMinutes = parseInt(document.getElementById('alarmInterval').value);
+            BLINK_TIME_MIN = parseInt(document.getElementById('blinkTime').value);
 
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
             MS5 = alarmMinutes * 60 * 1000;
@@ -1084,9 +1134,18 @@
                         countElement.innerHTML = `Starting in ${minutesUntilStart} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
                         countElement.classList.add('starting-text');
                         timer.classList.remove('finish-window');
+
+                        // Add blinking effect if within blink time
+                        if (timeUntilStart <= BLINK_TIME_MIN * 60000) {
+                            timer.classList.add('blinking');
+                        } else {
+                            timer.classList.remove('blinking');
+                        }
+
                         status = 'inactive';
                     } else {
                         countElement.classList.remove('starting-text');
+                        timer.classList.remove('blinking');
                         const elapsed = now - startT;
 
                         if (elapsed >= TOTAL_SESSION_TIME) {
@@ -1214,6 +1273,12 @@
             MAX_PEOPLE_PER_LINE = parseInt(this.value);
             saveState();
             updateLineConfigs();
+            updateTimers();
+        });
+
+        document.getElementById('blinkTime').addEventListener('change', function () {
+            BLINK_TIME_MIN = parseInt(this.value);
+            saveState();
             updateTimers();
         });
 
