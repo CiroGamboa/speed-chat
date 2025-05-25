@@ -64,7 +64,7 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)
     # Emit the new state to all connected clients
-    socketio.emit("state_update", state, broadcast=True, namespace="/")
+    socketio.emit("state_update", state, namespace="/")
     logger.debug("State update emitted to all clients")
 
 
@@ -77,10 +77,14 @@ def get_state():
 
 @app.route("/state", methods=["POST"])
 def update_state():
-    state = request.json
-    logger.debug(f"POST /state received: {state}")
-    save_state(state)
-    return jsonify({"status": "success"})
+    try:
+        state = request.json
+        logger.debug(f"POST /state received: {state}")
+        save_state(state)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        logger.error(f"Error updating state: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @socketio.on("connect")

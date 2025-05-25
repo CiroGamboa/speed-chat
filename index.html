@@ -1033,15 +1033,21 @@
         });
 
         // Connect to WebSocket server
-        const socket = io('http://localhost:5001', {
+        const socket = io('https://speed-chat-backend.fly.dev', {
+            transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 5,
-            reconnectionDelay: 1000
+            reconnectionDelay: 1000,
+            timeout: 20000,
+            forceNew: true,
+            path: '/socket.io/'
         });
 
         // Add connection status logging
         socket.on('connect', () => {
             console.log('Connected to WebSocket server');
+            // Request initial state when connected
+            socket.emit('get_state');
         });
 
         socket.on('disconnect', () => {
@@ -1089,6 +1095,11 @@
             // Force timer update
             updateTimers();
         });
+
+        // Add a function to request state update
+        function requestStateUpdate() {
+            socket.emit('get_state');
+        }
 
         // Function to update UI from state
         function updateUIFromState(config) {
@@ -1719,7 +1730,7 @@
             updateLineConfigs();
         }
 
-        // Add saveState function
+        // Modify saveState function to handle real-time updates
         async function saveState() {
             const state = {
                 config: {
@@ -1741,18 +1752,29 @@
             };
 
             try {
-                const response = await fetch("http://localhost:5001/state", {
+                console.log('Saving state:', state);
+                const response = await fetch("https://speed-chat-backend.fly.dev/state", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify(state),
                 });
+
                 if (!response.ok) {
-                    throw new Error("Failed to save state");
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || "Failed to save state");
                 }
+
+                const result = await response.json();
+                console.log('State saved successfully:', result);
+
+                // Request a state update after saving
+                requestStateUpdate();
             } catch (error) {
                 console.error("Error saving state:", error);
+                // Show error to user
+                alert("Failed to save changes. Please try again.");
             }
         }
 
