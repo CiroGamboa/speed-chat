@@ -424,25 +424,33 @@
             animation: fadeInOut 8s ease-in-out;
         }
 
+        .notification-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1999;
+            display: none;
+            animation: fadeInOut 8s ease-in-out;
+        }
+
         @keyframes fadeInOut {
             0% {
                 opacity: 0;
-                transform: translate(-50%, -50%) scale(0.8);
             }
 
             10% {
                 opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
             }
 
             80% {
                 opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
             }
 
             100% {
                 opacity: 0;
-                transform: translate(-50%, -50%) scale(0.8);
             }
         }
 
@@ -792,6 +800,7 @@
     </div>
     <h1>Welcome to Speed Chat!</h1>
 
+    <div class="notification-overlay" id="notificationOverlay"></div>
     <div class="notification" id="changeSeatNotification">
         Change seat, go to the left
     </div>
@@ -1003,7 +1012,12 @@
             localStorage.setItem('speedChatConfig', JSON.stringify(config));
         }
 
+        // Add a flag to track when settings are being updated
+        let isUpdatingSettings = false;
+
+        // Modify the updateTimingSettings function
         function updateTimingSettings() {
+            isUpdatingSettings = true;
             const sessionMinutes = parseInt(document.getElementById('sessionDuration').value);
             const alarmMinutes = parseInt(document.getElementById('alarmInterval').value);
             BLINK_TIME_MIN = parseInt(document.getElementById('blinkTime').value);
@@ -1011,6 +1025,11 @@
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
             MS5 = alarmMinutes * 60 * 1000;
             saveState();
+
+            // Reset the flag after a short delay to ensure all updates are complete
+            setTimeout(() => {
+                isUpdatingSettings = false;
+            }, 1000);
         }
 
         function toggleConfig() {
@@ -1150,21 +1169,31 @@
 
         function showChangeSeatNotification() {
             const notification = document.getElementById('changeSeatNotification');
-            notification.style.display = 'block';
+            const overlay = document.getElementById('notificationOverlay');
 
-            // Hide notification after the alarm duration
+            // Play the alarm sound first
+            bell.currentTime = 0;
+            bell.play().catch(error => {
+                console.error('Error playing alarm:', error);
+            });
+
+            // Then show the notification and overlay
+            notification.style.display = 'block';
+            overlay.style.display = 'block';
+
+            // Hide notification and overlay after the alarm duration
             setTimeout(() => {
                 notification.style.display = 'none';
+                overlay.style.display = 'none';
             }, alarmDuration);
         }
 
         function updateTimers() {
-            const container = document.getElementById('timers-container');
-            container.innerHTML = lineConfigs.map(config => `
+            document.getElementById('timers-container').innerHTML = lineConfigs.map(config => `
                 <div class="timer-container" data-line="${config.id}">
                     <div class="timer" data-line="${config.id}">
                         <div class="label">${config.name}</div>
-                        <div class="count">–:–</div>
+                        <div class="count">00:00</div>
                     </div>
                     <div class="people-panel">
                         <div class="title">People in Line</div>
@@ -1173,8 +1202,13 @@
                         </div>
                         <div class="people-list">
                             ${config.people && config.people.length > 0
-                    ? config.people.map(person => person.name).join(', ')
-                    : '<div class="empty-message">No one here yet</div>'}
+                    ? config.people.map(person => `
+                                    <div class="person-entry">
+                                        <span>${person.name}</span>
+                                    </div>
+                                `).join('')
+                    : '<div class="empty-message">No one here yet</div>'
+                }
                         </div>
                     </div>
                 </div>
@@ -1264,12 +1298,16 @@
                             }
                             status = 'active';
 
-                            const currentInterval = Math.floor(elapsed / MS5);
-                            if (currentInterval > lastBellTime) {
-                                bell.currentTime = 0;
-                                bell.play().catch(() => { });
-                                showChangeSeatNotification();
-                                lastBellTime = currentInterval;
+                            // Only trigger alarm if the timer is actually running and we've passed an interval
+                            if (status === 'active') {
+                                const currentInterval = Math.floor(elapsed / MS5);
+                                if (currentInterval > lastBellTime) {
+                                    // Only play alarm if we're not in the middle of updating settings
+                                    if (!window.isUpdatingSettings) {
+                                        showChangeSeatNotification();
+                                    }
+                                    lastBellTime = currentInterval;
+                                }
                             }
                         }
                     }
