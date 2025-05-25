@@ -31,6 +31,50 @@
             vertical-align: top;
         }
 
+        .timer-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 1rem;
+        }
+
+        .people-panel {
+            width: 200px;
+            margin-top: 0.5rem;
+            padding: 0.75rem;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 2px solid #ff97d7;
+            min-height: 60px;
+        }
+
+        .people-panel .title {
+            font-size: 0.9rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .people-panel .seats-info {
+            font-size: 0.8rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+        }
+
+        .people-panel .people-list {
+            font-size: 0.9rem;
+            color: #4a4949;
+            line-height: 1.4;
+        }
+
+        .people-panel .empty-message {
+            font-size: 0.9rem;
+            color: #999;
+            font-style: italic;
+        }
+
         .timer.active {
             border: 2px solid #8f0057;
         }
@@ -66,11 +110,23 @@
         }
 
         .timer .count.starting-text {
-            font-size: 1.7rem;
+            font-size: 1.3rem;
             font-weight: 600;
             color: #333;
-            line-height: 2.2rem;
-            white-space: nowrap;
+            line-height: 1.2;
+            white-space: normal;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: auto;
+            min-height: 2.5rem;
+        }
+
+        .timer .count.starting-text .scheduled-time {
+            font-size: 1.1rem;
+            color: #666;
+            margin-top: 0.2rem;
         }
 
         .timer .count.lounge-text {
@@ -554,6 +610,103 @@
                 box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
             }
         }
+
+        .line-config {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 4px;
+            align-items: center;
+            border: 1px solid #ff97d7;
+        }
+
+        .people-management {
+            width: 100%;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: #fafafa;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .people-count {
+            font-weight: bold;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+        }
+
+        .people-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .person-entry {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #fff;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .person-entry button {
+            background: none;
+            border: none;
+            color: #8f0057;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 0.25rem;
+            line-height: 1;
+        }
+
+        .person-entry button:hover {
+            color: #ff97d7;
+        }
+
+        .add-person {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .add-person input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+        }
+
+        .add-person button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .add-person button:hover {
+            background: #ff97d7;
+        }
+
+        .timer .people {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #4a4949;
+            max-height: 3em;
+            overflow-y: auto;
+        }
+
+        .timer .people-count {
+            font-size: 0.8rem;
+            color: #8f0057;
+            margin-top: 0.25rem;
+        }
     </style>
 </head>
 
@@ -619,6 +772,19 @@
                     <option value="9">9 minutes</option>
                     <option value="10">10 minutes</option>
                 </select>
+
+                <label for="maxPeople">Maximum People per Line:</label>
+                <select id="maxPeople">
+                    <option value="4">4 people</option>
+                    <option value="6">6 people</option>
+                    <option value="8">8 people</option>
+                    <option value="10">10 people</option>
+                    <option value="12">12 people</option>
+                    <option value="14">14 people</option>
+                    <option value="16">16 people</option>
+                    <option value="18">18 people</option>
+                    <option value="20">20 people</option>
+                </select>
             </div>
 
             <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
@@ -647,6 +813,7 @@
         let lineConfigs = [];
         let TOTAL_SESSION_TIME = 30 * 60 * 1000;
         let FINISH_WINDOW_MIN = 5;
+        let MAX_PEOPLE_PER_LINE = 4;
 
         // Get the duration of the alarm sound
         let alarmDuration = 0;
@@ -665,11 +832,13 @@
                 TOTAL_SESSION_TIME = 30 * 60 * 1000;
                 MS5 = 5 * 60 * 1000;
                 FINISH_WINDOW_MIN = 5;
+                MAX_PEOPLE_PER_LINE = 4;
 
                 // Reset form values
                 document.getElementById('sessionDuration').value = '30';
                 document.getElementById('alarmInterval').value = '5';
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
+                document.getElementById('maxPeople').value = '4';
 
                 // Clear timers container
                 document.getElementById('timers-container').innerHTML = '';
@@ -692,7 +861,9 @@
                 TOTAL_SESSION_TIME = config.sessionDuration * 60 * 1000;
                 MS5 = config.alarmInterval * 60 * 1000;
                 FINISH_WINDOW_MIN = config.finishWindow || 5;
+                MAX_PEOPLE_PER_LINE = config.maxPeople || 4;
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
+                document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE;
 
                 // Restore form values
                 document.getElementById('sessionDuration').value = config.sessionDuration;
@@ -711,7 +882,8 @@
                 scheduledTimes,
                 sessionDuration: parseInt(document.getElementById('sessionDuration').value),
                 alarmInterval: parseInt(document.getElementById('alarmInterval').value),
-                finishWindow: parseInt(document.getElementById('finishWindow').value)
+                finishWindow: parseInt(document.getElementById('finishWindow').value),
+                maxPeople: parseInt(document.getElementById('maxPeople').value)
             };
             localStorage.setItem('speedChatConfig', JSON.stringify(config));
         }
@@ -737,7 +909,8 @@
             const lineConfig = {
                 id: lineId,
                 name: `Line ${lineId}`,
-                time: ''
+                time: '',
+                people: []
             };
             lineConfigs.push(lineConfig);
             updateLineConfigs();
@@ -764,6 +937,26 @@
                 `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
             ).join('')}
                         </select>
+                    </div>
+                    <div class="people-management">
+                        <div class="people-count">
+                            People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}
+                        </div>
+                        <div class="people-list">
+                            ${(config.people || []).map(person => `
+                                <div class="person-entry">
+                                    <span>${person.name}</span>
+                                    <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="add-person">
+                            <input type="text" 
+                                   id="newPerson${config.id}" 
+                                   placeholder="Add person's name"
+                                   onkeypress="handlePersonInput(event, ${config.id})">
+                            <button type="button" onclick="addPerson(${config.id})">Add</button>
+                        </div>
                     </div>
                     <div class="line-buttons">
                         <button type="button" onclick="updateLineTime(${config.id})">Update</button>
@@ -852,9 +1045,22 @@
         function updateTimers() {
             const container = document.getElementById('timers-container');
             container.innerHTML = lineConfigs.map(config => `
-                <div class="timer" data-line="${config.id}">
-                    <div class="label">${config.name}</div>
-                    <div class="count">–:–</div>
+                <div class="timer-container" data-line="${config.id}">
+                    <div class="timer" data-line="${config.id}">
+                        <div class="label">${config.name}</div>
+                        <div class="count">–:–</div>
+                    </div>
+                    <div class="people-panel">
+                        <div class="title">People in Line</div>
+                        <div class="seats-info">
+                            ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE} seats
+                        </div>
+                        <div class="people-list">
+                            ${config.people && config.people.length > 0
+                    ? config.people.map(person => person.name).join(', ')
+                    : '<div class="empty-message">No one here yet</div>'}
+                        </div>
+                    </div>
                 </div>
             `).join('');
 
@@ -863,6 +1069,7 @@
                 let lastBellTime = 0;
                 const label = timer.querySelector('.label');
                 const countElement = timer.querySelector('.count');
+                const timerContainer = timer.closest('.timer-container');
 
                 function update() {
                     if (!scheduledTimes[line]) return;
@@ -872,7 +1079,9 @@
                     let remaining, status;
 
                     if (now < startT) {
-                        countElement.textContent = `Starting at ${formatTime(new Date(startT))}`;
+                        const timeUntilStart = startT - now;
+                        const minutesUntilStart = Math.ceil(timeUntilStart / 60000);
+                        countElement.innerHTML = `Starting in ${minutesUntilStart} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
                         countElement.classList.add('starting-text');
                         timer.classList.remove('finish-window');
                         status = 'inactive';
@@ -884,13 +1093,43 @@
                             countElement.textContent = "00:00";
                             timer.classList.remove('finish-window');
                             status = 'inactive';
+
+                            // Clear people when time is over
+                            const config = lineConfigs.find(c => c.id === parseInt(line));
+                            if (config) {
+                                config.people = [];
+                                saveState();
+                                // Update the entire timer container
+                                const configIndex = lineConfigs.findIndex(c => c.id === parseInt(line));
+                                if (configIndex !== -1) {
+                                    const newTimerContainer = document.createElement('div');
+                                    newTimerContainer.innerHTML = `
+                                        <div class="timer-container" data-line="${config.id}">
+                                            <div class="timer" data-line="${config.id}">
+                                                <div class="label">${config.name}</div>
+                                                <div class="count">00:00</div>
+                                            </div>
+                                            <div class="people-panel">
+                                                <div class="title">People in Line</div>
+                                                <div class="seats-info">
+                                                    0/${MAX_PEOPLE_PER_LINE} seats
+                                                </div>
+                                                <div class="people-list">
+                                                    <div class="empty-message">No one here yet</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    timerContainer.replaceWith(newTimerContainer.firstElementChild);
+                                }
+                            }
                         } else {
                             remaining = TOTAL_SESSION_TIME - elapsed;
                             const mm = Math.floor(remaining / 60000);
                             const ss = Math.floor((remaining % 60000) / 1000);
                             // Check finish window
                             if (remaining <= FINISH_WINDOW_MIN * 60000) {
-                                countElement.textContent = "Go to the lounge";
+                                countElement.textContent = "Go to the lobby";
                                 countElement.classList.add('lounge-text');
                                 timer.classList.add('finish-window');
                             } else {
@@ -917,6 +1156,43 @@
             });
         }
 
+        function addPerson(lineId) {
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config) return;
+
+            const input = document.getElementById(`newPerson${lineId}`);
+            const name = input.value.trim();
+
+            if (name && (!config.people || config.people.length < MAX_PEOPLE_PER_LINE)) {
+                if (!config.people) config.people = [];
+                config.people.push({
+                    id: Date.now(),
+                    name: name
+                });
+                input.value = '';
+                updateLineConfigs();
+                updateTimers();
+                saveState();
+            }
+        }
+
+        function removePerson(lineId, personId) {
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config || !config.people) return;
+
+            config.people = config.people.filter(p => p.id !== personId);
+            updateLineConfigs();
+            updateTimers();
+            saveState();
+        }
+
+        function handlePersonInput(event, lineId) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addPerson(lineId);
+            }
+        }
+
         // Add event listeners for global settings
         document.getElementById('sessionDuration').addEventListener('change', function () {
             updateTimingSettings();
@@ -931,6 +1207,13 @@
         document.getElementById('finishWindow').addEventListener('change', function () {
             FINISH_WINDOW_MIN = parseInt(this.value);
             saveState();
+            updateTimers();
+        });
+
+        document.getElementById('maxPeople').addEventListener('change', function () {
+            MAX_PEOPLE_PER_LINE = parseInt(this.value);
+            saveState();
+            updateLineConfigs();
             updateTimers();
         });
 
