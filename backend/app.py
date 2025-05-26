@@ -32,8 +32,10 @@ def load_state():
             "config": {
                 "sessionDuration": "30",
                 "alarmInterval": "5",
-                "maxPeoplePerLine": "4",
+                "maxPeoplePerLine": "10",
                 "blinkBeforeStart": False,
+                "blinkTime": "5",
+                "finishWindow": "5",
                 "lines": [],
             }
         }
@@ -43,14 +45,22 @@ def load_state():
             # Ensure the state has the correct structure
             if "config" not in state:
                 state = {"config": state}
+            # Ensure maxPeoplePerLine is set to 10 if not present or invalid
+            if (
+                "maxPeoplePerLine" not in state["config"]
+                or not state["config"]["maxPeoplePerLine"].isdigit()
+            ):
+                state["config"]["maxPeoplePerLine"] = "10"
             return state
         except json.JSONDecodeError:
             return {
                 "config": {
                     "sessionDuration": "30",
                     "alarmInterval": "5",
-                    "maxPeoplePerLine": "4",
+                    "maxPeoplePerLine": "10",
                     "blinkBeforeStart": False,
+                    "blinkTime": "5",
+                    "finishWindow": "5",
                     "lines": [],
                 }
             }
@@ -61,10 +71,13 @@ def save_state(state):
     # Ensure the state has the correct structure
     if "config" not in state:
         state = {"config": state}
+
+    # Save to file
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)
+
     # Emit the new state to all connected clients
-    socketio.emit("state_update", state, namespace="/")
+    socketio.emit("state_updated", state, namespace="/")
     logger.debug("State update emitted to all clients")
 
 
@@ -81,7 +94,7 @@ def update_state():
         state = request.json
         logger.debug(f"POST /state received: {state}")
         save_state(state)
-        return jsonify({"status": "success"})
+        return jsonify({"status": "success", "state": state})
     except Exception as e:
         logger.error(f"Error updating state: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -91,7 +104,7 @@ def update_state():
 def handle_connect():
     logger.info("Client connected")
     # Send current state to newly connected client
-    socketio.emit("state_update", load_state(), namespace="/")
+    socketio.emit("state_updated", load_state(), namespace="/")
     logger.debug("Initial state sent to client")
 
 
@@ -103,8 +116,15 @@ def handle_disconnect():
 @socketio.on("get_state")
 def handle_get_state():
     logger.info("Received get_state request")
-    socketio.emit("state_update", load_state(), namespace="/")
+    socketio.emit("state_updated", load_state(), namespace="/")
     logger.debug("State sent in response to get_state request")
+
+
+@socketio.on("state_saved")
+def handle_state_saved(state):
+    logger.info("Received state_saved event")
+    save_state(state)
+    logger.debug("State saved and broadcasted")
 
 
 if __name__ == "__main__":
