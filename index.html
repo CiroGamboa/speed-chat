@@ -1023,12 +1023,13 @@
         let lineConfigs = [];
         let TOTAL_SESSION_TIME = 30 * 60 * 1000;
         let FINISH_WINDOW_MIN = 5;
-        let MAX_PEOPLE_PER_LINE = 4;
+        let MAX_PEOPLE_PER_LINE = 10;
         let BLINK_TIME_MIN = 5;
         let currentRole = 'admin';
         let isUpdatingUI = false;
         let alarmDuration = 0;
         let audioEnabled = false;
+        let isStateUpdateInProgress = false;
 
         // Enable audio on first user interaction
         document.addEventListener('click', function enableAudio() {
@@ -1084,41 +1085,58 @@
         });
 
         // Listen for state updates from the server
-        socket.on('state_update', (newState) => {
+        socket.on('state_updated', (newState) => {
             console.log('Received state update:', newState);
 
-            // Ensure we have a valid state structure
-            if (!newState || !newState.config) {
-                console.error('Invalid state received:', newState);
+            // Prevent recursive state updates
+            if (isStateUpdateInProgress) {
+                console.log('State update already in progress, skipping');
                 return;
             }
 
-            // Update global variables
-            TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
-            MS5 = parseInt(newState.config.alarmInterval) * 60 * 1000;
-            MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine);
-            BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
-            FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
+            isStateUpdateInProgress = true;
 
-            // Update lineConfigs and scheduledTimes
-            lineConfigs = newState.config.lines.map((line, index) => ({
-                id: index + 1,
-                name: line.name,
-                time: line.time || '',
-                people: line.people || []
-            }));
-
-            // Update scheduledTimes based on lineConfigs
-            lineConfigs.forEach(config => {
-                if (config.time) {
-                    scheduledTimes[config.id] = parseTime(config.time);
+            try {
+                // Ensure we have a valid state structure
+                if (!newState || !newState.config) {
+                    console.error('Invalid state received:', newState);
+                    return;
                 }
-            });
 
-            // Update UI elements
-            updateUIFromState(newState.config);
-            // Force timer update
-            updateTimers();
+                // Update global variables
+                TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
+                MS5 = parseInt(newState.config.alarmInterval) * 60 * 1000;
+                MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine) || 10;
+                BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
+                FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
+
+                // Update UI elements
+                document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE.toString();
+
+                // Update lineConfigs and scheduledTimes
+                lineConfigs = newState.config.lines.map((line, index) => ({
+                    id: index + 1,
+                    name: line.name,
+                    time: line.time || '',
+                    people: line.people || []
+                }));
+
+                // Update scheduledTimes based on lineConfigs
+                lineConfigs.forEach(config => {
+                    if (config.time) {
+                        scheduledTimes[config.id] = parseTime(config.time);
+                    }
+                });
+
+                // Update UI elements
+                updateUIFromState(newState.config);
+                // Force timer update
+                updateTimers();
+            } catch (error) {
+                console.error('Error processing state update:', error);
+            } finally {
+                isStateUpdateInProgress = false;
+            }
         });
 
         // Add a function to request state update
@@ -1166,7 +1184,10 @@
                                    onchange="updateLineName(${config.id}, this.value)"
                                    placeholder="Line name"
                                    ${currentRole !== 'admin' ? 'disabled' : ''}>
-                            <select id="time${config.id}" required ${currentRole !== 'admin' ? 'disabled' : ''}>
+                            <select id="time${config.id}" 
+                                    onchange="updateLineTime(${config.id})"
+                                    required 
+                                    ${currentRole !== 'admin' ? 'disabled' : ''}>
                                 ${generateTimeOptions().map(time =>
                         `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
                     ).join('')}
@@ -1198,8 +1219,7 @@
                         </div>
                         ${currentRole === 'admin' ? `
                             <div class="line-buttons">
-                                <button type="button" onclick="updateLineTime(${config.id})">Update</button>
-                                <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
+                                <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
                             </div>
                         ` : ''}
                     `;
@@ -1264,7 +1284,10 @@
                                onchange="updateLineName(${config.id}, this.value)"
                                placeholder="Line name"
                                ${currentRole !== 'admin' ? 'disabled' : ''}>
-                        <select id="time${config.id}" required ${currentRole !== 'admin' ? 'disabled' : ''}>
+                        <select id="time${config.id}" 
+                                onchange="updateLineTime(${config.id})"
+                                required 
+                                ${currentRole !== 'admin' ? 'disabled' : ''}>
                             ${generateTimeOptions().map(time =>
                 `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
             ).join('')}
@@ -1296,7 +1319,6 @@
                     </div>
                     ${currentRole === 'admin' ? `
                         <div class="line-buttons">
-                            <button type="button" onclick="updateLineTime(${config.id})">Update</button>
                             <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
                         </div>
                     ` : ''}
@@ -1568,6 +1590,8 @@
                 updateLineConfigs();
                 updateTimers();
                 saveState();
+            } else if (config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
+                alert(`Maximum number of people (${MAX_PEOPLE_PER_LINE}) reached for this line`);
             }
 
             // Reset flag after a short delay
@@ -1752,11 +1776,16 @@
 
         // Modify saveState function to handle real-time updates
         async function saveState() {
+            if (isStateUpdateInProgress) {
+                console.log('State update already in progress, skipping save');
+                return;
+            }
+
             const state = {
                 config: {
                     sessionDuration: document.getElementById("sessionDuration")?.value || "30",
                     alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeoplePerLine")?.value || "4",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
                     blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
                     blinkTime: document.getElementById("blinkTime")?.value || "5",
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
@@ -1789,8 +1818,8 @@
                 const result = await response.json();
                 console.log('State saved successfully:', result);
 
-                // Request a state update after saving
-                requestStateUpdate();
+                // Emit state_saved event to trigger broadcast
+                socket.emit('state_saved', state);
             } catch (error) {
                 console.error("Error saving state:", error);
                 // Show error to user
@@ -1809,14 +1838,14 @@
                 TOTAL_SESSION_TIME = 30 * 60 * 1000;
                 MS5 = 5 * 60 * 1000;
                 FINISH_WINDOW_MIN = 5;
-                MAX_PEOPLE_PER_LINE = 4;
+                MAX_PEOPLE_PER_LINE = 10;
                 BLINK_TIME_MIN = 5;
 
                 // Reset form values
                 document.getElementById('sessionDuration').value = '30';
                 document.getElementById('alarmInterval').value = '5';
                 document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
-                document.getElementById('maxPeople').value = '4';
+                document.getElementById('maxPeople').value = '10';
                 document.getElementById('blinkTime').value = '5';
 
                 // Clear timers container and lines container
