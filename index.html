@@ -146,6 +146,15 @@
                 pointer-events: auto;
             }
 
+            /* Add styles for viewer role on mobile */
+            .config-section[data-role="viewer"] {
+                display: none !important;
+            }
+
+            .config-section[data-role="viewer"] .config-header {
+                display: none !important;
+            }
+
             .gear-icon {
                 width: 24px;
                 height: 24px;
@@ -1662,26 +1671,35 @@
         function updateUIBasedOnRole() {
             isUpdatingUI = true;  // Set flag before UI update
             currentRole = getRoleFromUrl();
+            const configSection = document.getElementById('configSection');
             const configContent = document.getElementById('configContent');
             const globalSettings = configContent.querySelector('.global-settings');
             const addLineBtn = configContent.querySelector('.add-line-btn');
             const formButtons = configContent.querySelector('.form-buttons');
             const linesContainer = document.getElementById('linesContainer');
 
+            // Set data-role attribute for mobile styles
+            if (configSection) {
+                configSection.setAttribute('data-role', currentRole);
+            }
+
             if (currentRole === 'viewer') {
-                // Only show the lines
+                // Hide entire config section for viewers
+                if (configSection) configSection.style.display = 'none';
                 globalSettings.style.display = 'none';
                 addLineBtn.style.display = 'none';
                 formButtons.style.display = 'none';
                 linesContainer.style.display = 'block';
             } else if (currentRole === 'dispatcher') {
-                // Show only the line configs
+                // Show config section and line configs for dispatchers
+                if (configSection) configSection.style.display = 'block';
                 globalSettings.style.display = 'none';
                 addLineBtn.style.display = 'none';
                 formButtons.style.display = 'none';
                 linesContainer.style.display = 'block';
             } else {
-                // Show all config elements (admin)
+                // Show all config elements for admin
+                if (configSection) configSection.style.display = 'block';
                 globalSettings.style.display = 'block';
                 addLineBtn.style.display = 'block';
                 formButtons.style.display = 'block';
