@@ -912,6 +912,7 @@
                     <span class="tooltip-icon" data-tooltip="How long each speed chat session will last">?</span>
                 </label>
                 <select id="sessionDuration">
+                    <option value="1">1 minute</option>
                     <option value="10">10 minutes</option>
                     <option value="15">15 minutes</option>
                     <option value="20">20 minutes</option>
@@ -995,6 +996,21 @@
                     <option value="9">9 minutes</option>
                     <option value="10">10 minutes</option>
                 </select>
+
+                <label>
+                    Auto Reschedule
+                    <span class="tooltip-icon"
+                        data-tooltip="Automatically reschedule the timer after it ends. If off, timer must be manually restarted.">?</span>
+                </label>
+                <select id="autoReschedule">
+                    <option value="off" selected>Off</option>
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="20">20 minutes</option>
+                    <option value="25">25 minutes</option>
+                    <option value="30">30 minutes</option>
+                </select>
             </div>
 
             <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
@@ -1031,6 +1047,7 @@
         let alarmDuration = 0;
         let audioEnabled = false;
         let isStateUpdateInProgress = false;
+        let AUTO_RESCHEDULE_MIN = 'off';
 
         // Enable audio on first user interaction
         document.addEventListener('click', function enableAudio() {
@@ -1110,9 +1127,15 @@
                 MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine) || 10;
                 BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
                 FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
+                AUTO_RESCHEDULE_MIN = newState.config.autoReschedule || 'off';
 
                 // Update UI elements
+                document.getElementById('sessionDuration').value = newState.config.sessionDuration;
+                document.getElementById('alarmInterval').value = newState.config.alarmInterval;
                 document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE.toString();
+                document.getElementById('blinkTime').value = BLINK_TIME_MIN.toString();
+                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN.toString();
+                document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
 
                 // Update lineConfigs and scheduledTimes
                 lineConfigs = newState.config.lines.map((line, index) => ({
@@ -1126,6 +1149,8 @@
                 lineConfigs.forEach(config => {
                     if (config.time) {
                         scheduledTimes[config.id] = parseTime(config.time);
+                    } else {
+                        delete scheduledTimes[config.id];
                     }
                 });
 
@@ -1156,7 +1181,8 @@
                 "maxPeoplePerLine": config.maxPeoplePerLine,
                 "blinkBeforeStart": config.blinkBeforeStart,
                 "blinkTime": config.blinkTime,
-                "finishWindow": config.finishWindow
+                "finishWindow": config.finishWindow,
+                "autoReschedule": config.autoReschedule || 'off'
             };
 
             Object.entries(elements).forEach(([id, value]) => {
@@ -1503,12 +1529,49 @@
                             timer.classList.remove('finish-window');
                             status = 'inactive';
 
-                            // Clear people when time is over
+                            // Always clear people when time is over
                             const config = lineConfigs.find(c => c.id === parseInt(line));
                             if (config) {
                                 config.people = [];
-                                saveState();
-                                // Update the entire timer container
+                                // Update the people panel immediately
+                                const peoplePanel = timerContainer.querySelector('.people-panel .people-list');
+                                if (peoplePanel) {
+                                    peoplePanel.innerHTML = '<div class="empty-message">No one here yet</div>';
+                                }
+                            }
+
+                            // Check auto reschedule setting
+                            const autoRescheduleValue = document.getElementById('autoReschedule').value;
+                            if (autoRescheduleValue !== 'off') {
+                                // Reschedule timer for now + autoRescheduleValue minutes
+                                const nextStart = Date.now() + parseInt(autoRescheduleValue) * 60 * 1000;
+                                scheduledTimes[line] = nextStart;
+                                if (config) {
+                                    config.time = formatTime(new Date(nextStart));
+                                    // Update the time select element
+                                    const timeSelect = document.getElementById(`time${config.id}`);
+                                    if (timeSelect) {
+                                        timeSelect.value = config.time;
+                                    }
+                                }
+                            } else {
+                                // Clear scheduled time and line configuration
+                                delete scheduledTimes[line];
+                                if (config) {
+                                    config.time = '';
+                                    // Update the time select element
+                                    const timeSelect = document.getElementById(`time${config.id}`);
+                                    if (timeSelect) {
+                                        timeSelect.value = '';
+                                    }
+                                }
+                            }
+
+                            // Save state after all updates
+                            saveState();
+
+                            // Update the timer container if auto reschedule is off
+                            if (autoRescheduleValue === 'off') {
                                 const configIndex = lineConfigs.findIndex(c => c.id === parseInt(line));
                                 if (configIndex !== -1) {
                                     const newTimerContainer = document.createElement('div');
@@ -1656,6 +1719,11 @@
             updateTimers();
         });
 
+        document.getElementById('autoReschedule').addEventListener('change', function () {
+            AUTO_RESCHEDULE_MIN = this.value;
+            saveState();
+        });
+
         // Function to get role from URL parameters
         function getRoleFromUrl() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -1765,59 +1833,60 @@
             const alarmMinutes = parseInt(document.getElementById('alarmInterval').value);
             BLINK_TIME_MIN = parseInt(document.getElementById('blinkTime').value);
             FINISH_WINDOW_MIN = parseInt(document.getElementById('finishWindow').value);
+            AUTO_RESCHEDULE_MIN = document.getElementById('autoReschedule').value;
 
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
             MS5 = alarmMinutes * 60 * 1000;
-            saveState();
-        }
 
-        // Add a helper function to safely add a line
-        function addLine(name, people = []) {
-            // Find the highest existing line number
-            const existingNumbers = lineConfigs.map(config => {
-                const match = config.name.match(/Line (\d+)/);
-                return match ? parseInt(match[1]) : 0;
-            });
-            const nextNumber = Math.max(0, ...existingNumbers) + 1;
-
-            const lineId = lineConfigs.length + 1;
-            const lineConfig = {
-                id: lineId,
-                name: name || `Line ${nextNumber}`,
-                time: '',
-                people: people || []
+            // Create state update
+            const state = {
+                config: {
+                    sessionDuration: sessionMinutes.toString(),
+                    alarmInterval: alarmMinutes.toString(),
+                    maxPeoplePerLine: MAX_PEOPLE_PER_LINE.toString(),
+                    blinkBeforeStart: document.getElementById('blinkBeforeStart')?.checked || false,
+                    blinkTime: BLINK_TIME_MIN.toString(),
+                    finishWindow: FINISH_WINDOW_MIN.toString(),
+                    autoReschedule: AUTO_RESCHEDULE_MIN,
+                    lines: lineConfigs.map(config => ({
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || []
+                    }))
+                }
             };
-            lineConfigs.push(lineConfig);
-            updateLineConfigs();
+
+            // Save state immediately
+            saveState(state);
         }
 
         // Modify saveState function to handle real-time updates
-        async function saveState() {
+        async function saveState(stateToSave = null) {
             if (isStateUpdateInProgress) {
                 console.log('State update already in progress, skipping save');
                 return;
             }
 
-            const state = {
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    lines: Array.from(document.querySelectorAll(".line-config")).map(line => ({
-                        name: line.querySelector(".line-name")?.value || "",
-                        time: line.querySelector(`select[id^="time"]`)?.value || "",
-                        people: Array.from(line.querySelectorAll(".person-entry")).map(person => ({
-                            id: Date.now() + Math.random(), // Generate unique ID
-                            name: person.querySelector("span")?.textContent || ""
-                        }))
-                    }))
-                }
-            };
+            isStateUpdateInProgress = true;
 
             try {
+                const state = stateToSave || {
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || []
+                        }))
+                    }
+                };
+
                 console.log('Saving state:', state);
                 const response = await fetch("https://speed-chat-backend.fly.dev/state", {
                     method: "POST",
@@ -1839,8 +1908,9 @@
                 socket.emit('state_saved', state);
             } catch (error) {
                 console.error("Error saving state:", error);
-                // Show error to user
                 alert("Failed to save changes. Please try again.");
+            } finally {
+                isStateUpdateInProgress = false;
             }
         }
 
@@ -1857,6 +1927,7 @@
                 FINISH_WINDOW_MIN = 5;
                 MAX_PEOPLE_PER_LINE = 10;
                 BLINK_TIME_MIN = 5;
+                AUTO_RESCHEDULE_MIN = 'off';
 
                 // Reset form values
                 document.getElementById('sessionDuration').value = '30';

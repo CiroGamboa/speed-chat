@@ -36,6 +36,7 @@ def load_state():
                 "blinkBeforeStart": False,
                 "blinkTime": "5",
                 "finishWindow": "5",
+                "autoReschedule": "off",
                 "lines": [],
             }
         }
@@ -61,6 +62,7 @@ def load_state():
                     "blinkBeforeStart": False,
                     "blinkTime": "5",
                     "finishWindow": "5",
+                    "autoReschedule": "off",
                     "lines": [],
                 }
             }
