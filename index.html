@@ -897,14 +897,6 @@
             </svg>
         </div>
         <div class="config-content" id="configContent">
-            <div class="role-selector">
-                <label>Select Role:</label>
-                <select id="userRole" onchange="updateUIBasedOnRole()">
-                    <option value="admin">Admin</option>
-                    <option value="dispatcher">Dispatcher</option>
-                    <option value="viewer">Viewer</option>
-                </select>
-            </div>
             <div class="global-settings">
                 <label>
                     Session Duration
@@ -1025,7 +1017,7 @@
         let FINISH_WINDOW_MIN = 5;
         let MAX_PEOPLE_PER_LINE = 10;
         let BLINK_TIME_MIN = 5;
-        let currentRole = 'admin';
+        let currentRole = 'viewer'; // Default to viewer
         let isUpdatingUI = false;
         let alarmDuration = 0;
         let audioEnabled = false;
@@ -1319,7 +1311,7 @@
                     </div>
                     ${currentRole === 'admin' ? `
                         <div class="line-buttons">
-                            <button type="button" onclick="removeLineConfig(${config.id})">Remove</button>
+                            <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
                         </div>
                     ` : ''}
                 </div>
@@ -1655,34 +1647,41 @@
             updateTimers();
         });
 
+        // Function to get role from URL parameters
+        function getRoleFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const role = urlParams.get('role');
+            // Only allow valid roles
+            if (role && ['admin', 'dispatcher', 'viewer'].includes(role)) {
+                return role;
+            }
+            return 'viewer'; // Default to viewer if no valid role is provided
+        }
+
         // Function to update UI based on role
         function updateUIBasedOnRole() {
             isUpdatingUI = true;  // Set flag before UI update
-            currentRole = document.getElementById('userRole').value;
+            currentRole = getRoleFromUrl();
             const configContent = document.getElementById('configContent');
-            const roleSelector = configContent.querySelector('.role-selector');
             const globalSettings = configContent.querySelector('.global-settings');
             const addLineBtn = configContent.querySelector('.add-line-btn');
             const formButtons = configContent.querySelector('.form-buttons');
             const linesContainer = document.getElementById('linesContainer');
 
             if (currentRole === 'viewer') {
-                // Only show the role selector
-                roleSelector.style.display = 'block';
+                // Only show the lines
                 globalSettings.style.display = 'none';
                 addLineBtn.style.display = 'none';
                 formButtons.style.display = 'none';
-                linesContainer.style.display = 'none';
+                linesContainer.style.display = 'block';
             } else if (currentRole === 'dispatcher') {
-                // Show only the role selector and line configs
-                roleSelector.style.display = 'block';
+                // Show only the line configs
                 globalSettings.style.display = 'none';
                 addLineBtn.style.display = 'none';
                 formButtons.style.display = 'none';
                 linesContainer.style.display = 'block';
             } else {
                 // Show all config elements (admin)
-                roleSelector.style.display = 'block';
                 globalSettings.style.display = 'block';
                 addLineBtn.style.display = 'block';
                 formButtons.style.display = 'block';
@@ -1692,19 +1691,25 @@
             // Update line configs to reflect new permissions
             updateLineConfigs();
 
-            // Save the state after updating the role
-            saveState();
-
             // Reset flag after a short delay to ensure all updates are complete
             setTimeout(() => {
                 isUpdatingUI = false;
             }, 1000);
         }
 
+        // Remove the role selector from the config content
+        document.addEventListener('DOMContentLoaded', function () {
+            const configContent = document.getElementById('configContent');
+            const roleSelector = configContent.querySelector('.role-selector');
+            if (roleSelector) {
+                roleSelector.remove();
+            }
+            // Initialize UI based on role from URL
+            updateUIBasedOnRole();
+        });
+
         // Load saved state when page loads
         loadSavedState();
-        // Initialize UI based on role
-        updateUIBasedOnRole();
 
         // Password protection
         const PASSWORD = 'speedchat2025';
