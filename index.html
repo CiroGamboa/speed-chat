@@ -1026,7 +1026,7 @@
         let FINISH_WINDOW_MIN = 5;
         let MAX_PEOPLE_PER_LINE = 10;
         let BLINK_TIME_MIN = 5;
-        let currentRole = 'viewer'; // Default to viewer
+        let currentRole = getRoleFromUrl(); // Initialize role from URL
         let isUpdatingUI = false;
         let alarmDuration = 0;
         let audioEnabled = false;
@@ -1686,24 +1686,24 @@
             if (currentRole === 'viewer') {
                 // Hide entire config section for viewers
                 if (configSection) configSection.style.display = 'none';
-                globalSettings.style.display = 'none';
-                addLineBtn.style.display = 'none';
-                formButtons.style.display = 'none';
-                linesContainer.style.display = 'block';
+                if (globalSettings) globalSettings.style.display = 'none';
+                if (addLineBtn) addLineBtn.style.display = 'none';
+                if (formButtons) formButtons.style.display = 'none';
+                if (linesContainer) linesContainer.style.display = 'block';
             } else if (currentRole === 'dispatcher') {
-                // Show config section and line configs for dispatchers
+                // Show config section but hide global settings and add line button for dispatchers
                 if (configSection) configSection.style.display = 'block';
-                globalSettings.style.display = 'none';
-                addLineBtn.style.display = 'none';
-                formButtons.style.display = 'none';
-                linesContainer.style.display = 'block';
+                if (globalSettings) globalSettings.style.display = 'none';
+                if (addLineBtn) addLineBtn.style.display = 'none';
+                if (formButtons) formButtons.style.display = 'none';
+                if (linesContainer) linesContainer.style.display = 'block';
             } else {
                 // Show all config elements for admin
                 if (configSection) configSection.style.display = 'block';
-                globalSettings.style.display = 'block';
-                addLineBtn.style.display = 'block';
-                formButtons.style.display = 'block';
-                linesContainer.style.display = 'block';
+                if (globalSettings) globalSettings.style.display = 'block';
+                if (addLineBtn) addLineBtn.style.display = 'block';
+                if (formButtons) formButtons.style.display = 'block';
+                if (linesContainer) linesContainer.style.display = 'block';
             }
 
             // Update line configs to reflect new permissions
@@ -1715,14 +1715,8 @@
             }, 1000);
         }
 
-        // Remove the role selector from the config content
+        // Initialize UI based on role when DOM is ready
         document.addEventListener('DOMContentLoaded', function () {
-            const configContent = document.getElementById('configContent');
-            const roleSelector = configContent.querySelector('.role-selector');
-            if (roleSelector) {
-                roleSelector.remove();
-            }
-            // Initialize UI based on role from URL
             updateUIBasedOnRole();
         });
 
