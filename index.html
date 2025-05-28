@@ -574,7 +574,6 @@
             z-index: 2000;
             display: none;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            animation: fadeInOut 8s ease-in-out;
         }
 
         .notification-overlay {
@@ -586,7 +585,6 @@
             background: rgba(0, 0, 0, 0.7);
             z-index: 1999;
             display: none;
-            animation: fadeInOut 8s ease-in-out;
         }
 
         @keyframes fadeInOut {
@@ -873,6 +871,80 @@
             margin-top: 0.5rem;
             display: none;
         }
+
+        .alarm-toggle-container {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            border: 2px solid #ff97d7;
+            z-index: 3000;
+            pointer-events: auto;
+        }
+
+        .alarm-toggle-label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #8f0057;
+            margin: 0;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 24px;
+            pointer-events: auto;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+            z-index: 3001;
+        }
+
+        .toggle-switch label {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+            pointer-events: auto;
+        }
+
+        .toggle-switch label:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked+label {
+            background-color: #8f0057;
+        }
+
+        .toggle-switch input:checked+label:before {
+            transform: translateX(16px);
+        }
     </style>
 </head>
 
@@ -891,6 +963,14 @@
         <img src="logo.png" alt="Speed Chat Logo" class="logo">
     </div>
     <h1>Welcome to Speed Chat!</h1>
+
+    <div class="alarm-toggle-container">
+        <label for="alarmToggle" class="alarm-toggle-label">Alarm</label>
+        <div class="toggle-switch">
+            <input type="checkbox" id="alarmToggle" checked>
+            <label for="alarmToggle"></label>
+        </div>
+    </div>
 
     <div class="notification-overlay" id="notificationOverlay"></div>
     <div class="notification" id="changeSeatNotification">
@@ -1048,6 +1128,7 @@
         let audioEnabled = false;
         let isStateUpdateInProgress = false;
         let AUTO_RESCHEDULE_MIN = 'off';
+        let alarmsEnabled = localStorage.getItem('alarmsEnabled') !== 'false'; // Default to true if not set
 
         // Enable audio on first user interaction
         document.addEventListener('click', function enableAudio() {
@@ -1421,6 +1502,10 @@
         });
 
         function showChangeSeatNotification() {
+            // Check if alarms are enabled from the toggle
+            const alarmToggle = document.getElementById('alarmToggle');
+            if (!alarmToggle.checked) return;
+
             const notification = document.getElementById('changeSeatNotification');
             const overlay = document.getElementById('notificationOverlay');
 
@@ -1957,6 +2042,19 @@
         document.querySelector('.reset-btn').addEventListener('click', function (e) {
             e.preventDefault();
             resetApplication();
+        });
+
+        // Add this after the DOMContentLoaded event listener
+        document.addEventListener('DOMContentLoaded', function () {
+            // Set initial toggle state from localStorage
+            const alarmToggle = document.getElementById('alarmToggle');
+            alarmToggle.checked = alarmsEnabled;
+
+            // Add event listener for toggle changes
+            alarmToggle.addEventListener('change', function () {
+                alarmsEnabled = this.checked;
+                localStorage.setItem('alarmsEnabled', alarmsEnabled);
+            });
         });
     </script>
 </body>
