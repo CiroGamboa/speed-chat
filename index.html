@@ -1609,12 +1609,8 @@
                         timer.classList.remove('blinking');
                         const elapsed = now - startT;
 
-                        if (elapsed >= TOTAL_SESSION_TIME) {
-                            countElement.textContent = "00:00";
-                            timer.classList.remove('finish-window');
-                            status = 'inactive';
-
-                            // Always clear people when time is over
+                        // Clear people when timer starts
+                        if (elapsed < 1000) { // Within first second of starting
                             const config = lineConfigs.find(c => c.id === parseInt(line));
                             if (config) {
                                 config.people = [];
@@ -1623,7 +1619,15 @@
                                 if (peoplePanel) {
                                     peoplePanel.innerHTML = '<div class="empty-message">No one here yet</div>';
                                 }
+                                // Save state after clearing people
+                                saveState();
                             }
+                        }
+
+                        if (elapsed >= TOTAL_SESSION_TIME) {
+                            countElement.textContent = "00:00";
+                            timer.classList.remove('finish-window');
+                            status = 'inactive';
 
                             // Check auto reschedule setting
                             const autoRescheduleValue = document.getElementById('autoReschedule').value;
