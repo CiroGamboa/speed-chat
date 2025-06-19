@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["gunicorn", "-w", "2", "-k", "eventlet", "app:app", "--bind", "0.0.0.0:8080"] 
+CMD ["gunicorn", "-w", "2", "-k", "gevent", "app:app", "--bind", "0.0.0.0:8080"] 

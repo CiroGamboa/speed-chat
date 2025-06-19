@@ -1,10 +1,10 @@
-# fly.toml app configuration file generated for speed-chat-backend on 2025-05-25T01:45:00-05:00
+# fly.toml app configuration file generated for speed-chat-api on 2025-01-27T00:00:00-05:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = "speedchat"
-primary_region = "lax"
+app = "speed-chat-api"
+primary_region = "bog"
 
 [build]
   dockerfile = "Dockerfile"
@@ -17,7 +17,7 @@ primary_region = "lax"
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ["app"]
 
 [[services]]

@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Initialize database at module level
+init_db()
+logger.info("Database initialized")
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(
@@ -19,7 +23,7 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     logger=True,
     engineio_logger=True,
-    async_mode="eventlet",
+    async_mode="threading",
     ping_timeout=60,
     ping_interval=25,
 )
@@ -175,7 +179,5 @@ def handle_state_saved(state):
 
 
 if __name__ == "__main__":
-    # Initialize database
-    init_db()
     logger.info("Starting server on port 8080")
     socketio.run(app, host="0.0.0.0", port=8080, debug=True)

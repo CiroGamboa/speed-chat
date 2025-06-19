@@ -14,9 +14,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
 # Get database URL from environment variable
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/speedchat"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./speedchat.db")
+
+# Fix for Fly.io postgres:// URLs (SQLAlchemy 2.0+ requires postgresql://)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Create SQLAlchemy engine
 engine = create_engine(DATABASE_URL)

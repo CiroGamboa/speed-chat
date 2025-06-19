@@ -1110,12 +1110,14 @@
     </div>
 
     <audio id="bell" src="alarm.mp3" preload="auto"></audio>
+    <audio id="bell30s" src="30s_alarm.mp3" preload="auto"></audio>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
         // Initialize variables first
         let MS5 = 5 * 60 * 1000;
         const bell = document.getElementById('bell');
+        const bell30s = document.getElementById('bell30s');
         let scheduledTimes = {};
         let lineConfigs = [];
         let TOTAL_SESSION_TIME = 30 * 60 * 1000;
@@ -1125,6 +1127,7 @@
         let currentRole = getRoleFromUrl(); // Initialize role from URL
         let isUpdatingUI = false;
         let alarmDuration = 0;
+        let alarm30sDuration = 0;
         let audioEnabled = false;
         let isStateUpdateInProgress = false;
         let AUTO_RESCHEDULE_MIN = 'off';
@@ -1134,31 +1137,51 @@
         document.addEventListener('click', function enableAudio() {
             if (!audioEnabled) {
                 audioEnabled = true;
-                // Try to play and immediately pause to enable audio
-                bell.play().then(() => {
-                    bell.pause();
-                    bell.currentTime = 0;
-                    console.log('Audio enabled successfully');
-                }).catch(error => {
-                    console.error('Error enabling audio:', error);
+                // Try to play and immediately pause to enable audio for both alarms
+                Promise.all([
+                    bell.play().then(() => {
+                        bell.pause();
+                        bell.currentTime = 0;
+                        console.log('Main alarm audio enabled successfully');
+                    }).catch(error => {
+                        console.error('Error enabling main alarm audio:', error);
+                    }),
+                    bell30s.play().then(() => {
+                        bell30s.pause();
+                        bell30s.currentTime = 0;
+                        console.log('30-second alarm audio enabled successfully');
+                    }).catch(error => {
+                        console.error('Error enabling 30-second alarm audio:', error);
+                    })
+                ]).then(() => {
+                    console.log('All audio enabled successfully');
                 });
                 // Remove the event listener after first interaction
                 document.removeEventListener('click', enableAudio);
             }
         }, { once: true });
 
-        // Get the duration of the alarm sound and ensure it's loaded
+        // Get the duration of the alarm sounds and ensure they're loaded
         bell.addEventListener('loadeddata', function () {
-            console.log('Alarm sound loaded successfully');
+            console.log('Main alarm sound loaded successfully');
             alarmDuration = bell.duration * 1000; // Convert to milliseconds
         });
 
         bell.addEventListener('error', function (e) {
-            console.error('Error loading alarm sound:', e);
+            console.error('Error loading main alarm sound:', e);
+        });
+
+        bell30s.addEventListener('loadeddata', function () {
+            console.log('30-second alarm sound loaded successfully');
+            alarm30sDuration = bell30s.duration * 1000; // Convert to milliseconds
+        });
+
+        bell30s.addEventListener('error', function (e) {
+            console.error('Error loading 30-second alarm sound:', e);
         });
 
         // Connect to WebSocket server
-        const socket = io('https://speedchat.fly.dev', {
+        const socket = io('https://speed-chat-api.fly.dev', {
             transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 5,
@@ -1549,6 +1572,30 @@
             }
         }
 
+        function showThirtySecondAlarm() {
+            // Check if 30-second alarms are enabled
+            if (!alarmsEnabled) return;
+
+            // Only try to play sound if audio is enabled
+            if (audioEnabled) {
+                // Reset and play the 30-second alarm sound
+                bell30s.currentTime = 0;
+
+                // Try to play the sound
+                const playPromise = bell30s.play();
+
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log('30-second alarm sound started playing');
+                    }).catch(error => {
+                        console.error('Error playing 30-second alarm:', error);
+                    });
+                }
+            } else {
+                console.log('Audio not enabled yet, cannot play 30-second alarm');
+            }
+        }
+
         function updateTimers() {
             document.getElementById('timers-container').innerHTML = lineConfigs.map(config => `
                 <div class="timer-container" data-line="${config.id}">
@@ -1711,6 +1758,15 @@
                                         showChangeSeatNotification();
                                     }
                                     lastBellTime = currentInterval;
+                                }
+
+                                // Check for 30-second alarm (30 seconds before main alarm)
+                                const timeUntilNextAlarm = MS5 - (elapsed % MS5);
+                                if (timeUntilNextAlarm <= 30000 && timeUntilNextAlarm > 29800) { // 30 seconds ± 200ms tolerance
+                                    // Only play 30-second alarm if we're not in the middle of updating UI or settings
+                                    if (!isUpdatingUI && !window.isUpdatingSettings) {
+                                        showThirtySecondAlarm();
+                                    }
                                 }
                             }
                         }
@@ -1977,7 +2033,7 @@
                 };
 
                 console.log('Saving state:', state);
-                const response = await fetch("https://speedchat.fly.dev/state", {
+                const response = await fetch("https://speed-chat-api.fly.dev/state", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
