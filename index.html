@@ -1158,7 +1158,7 @@
         });
 
         // Connect to WebSocket server
-        const socket = io('https://speed-chat-backend.fly.dev', {
+        const socket = io('https://speedchat.fly.dev', {
             transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 5,
@@ -1977,7 +1977,7 @@
                 };
 
                 console.log('Saving state:', state);
-                const response = await fetch("https://speed-chat-backend.fly.dev/state", {
+                const response = await fetch("https://speedchat.fly.dev/state", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
