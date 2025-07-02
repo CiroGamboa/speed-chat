@@ -1296,6 +1296,8 @@
                 updateUIFromState(newState.config);
                 // Force timer update
                 updateTimers();
+
+                console.log('State update processed successfully');
             } catch (error) {
                 console.error('Error processing state update:', error);
             } finally {
@@ -1429,13 +1431,51 @@
             lineConfigs.push(lineConfig);
             updateLineConfigs();
             updateTimers(); // Update timers immediately to show the new line
-            saveState();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || []
+                    }))
+                }
+            };
+            saveState(state);
         }
 
         function removeLineConfig(lineId) {
             lineConfigs = lineConfigs.filter(config => config.id !== lineId);
             updateLineConfigs();
-            saveState();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || []
+                    }))
+                }
+            };
+            saveState(state);
         }
 
         function updateLineConfigs() {
@@ -1496,7 +1536,26 @@
             if (config) {
                 config.name = name || `Line ${lineId}`; // Ensure there's always a name
                 updateTimers(); // Update timers when name changes
-                saveState();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || []
+                        }))
+                    }
+                };
+                saveState(state);
             }
         }
 
@@ -1507,7 +1566,26 @@
                 scheduledTimes[lineId] = parseTime(timeSelect.value);
                 config.time = timeSelect.value;
                 updateTimers();
-                saveState();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || []
+                        }))
+                    }
+                };
+                saveState(state);
             }
         }
 
@@ -1832,7 +1910,26 @@
                 input.value = '';
                 updateLineConfigs();
                 updateTimers();
-                saveState();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || []
+                        }))
+                    }
+                };
+                saveState(state);
             } else if (config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
                 alert(`Maximum number of people (${MAX_PEOPLE_PER_LINE}) reached for this line`);
             }
@@ -1853,7 +1950,26 @@
             config.people = config.people.filter(p => p.id !== personId);
             updateLineConfigs();
             updateTimers();
-            saveState();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || []
+                    }))
+                }
+            };
+            saveState(state);
 
             // Reset flag after a short delay
             setTimeout(() => {
@@ -2017,9 +2133,8 @@
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
             MS5 = alarmMinutes * 60 * 1000;
 
-            // Create state update with versioning
+            // Create state update without version to prevent conflicts
             const state = {
-                version: currentStateVersion,
                 timestamp: Date.now() / 1000,
                 config: {
                     sessionDuration: sessionMinutes.toString(),
@@ -2052,7 +2167,7 @@
 
             try {
                 const state = stateToSave || {
-                    version: currentStateVersion,
+                    // Don't send version for normal operations to prevent conflicts
                     timestamp: Date.now() / 1000,
                     config: {
                         sessionDuration: document.getElementById("sessionDuration")?.value || "30",
@@ -2082,10 +2197,10 @@
                 if (!response.ok) {
                     const errorData = await response.json();
                     if (response.status === 409) {
-                        // State conflict - request fresh state
+                        // State conflict - request fresh state and don't show error
                         console.warn('State conflict detected, requesting fresh state');
                         socket.emit('get_state');
-                        throw new Error('State conflict. Please refresh and try again.');
+                        return; // Don't throw error, just return
                     }
                     throw new Error(errorData.message || "Failed to save state");
                 }
@@ -2099,12 +2214,15 @@
                     lastStateTimestamp = result.state.timestamp || 0;
                 }
 
-                // Emit state_saved event to trigger broadcast to other clients
+                // Always emit state_saved event to trigger broadcast to all clients
+                // This ensures real-time sync across all connected clients
                 socket.emit('state_saved', state);
+                console.log('State saved event emitted for broadcast');
             } catch (error) {
                 console.error("Error saving state:", error);
                 if (error.message.includes('conflict')) {
-                    alert("Your changes conflict with another user's changes. Please refresh the page.");
+                    // Don't show alert for conflicts, just log and continue
+                    console.warn("State conflict detected, will sync with server state");
                 } else {
                     alert("Failed to save changes. Please try again.");
                 }

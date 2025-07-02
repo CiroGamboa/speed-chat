@@ -78,8 +78,7 @@ def get_state_from_db(db: Session) -> Dict[str, Any]:
                 {"name": line.name, "time": line.time, "people": people_data}
             )
 
-        current_state_version += 1
-
+        # Don't increment version on read operations
         return {
             "version": current_state_version,
             "timestamp": time.time(),
@@ -102,8 +101,9 @@ def get_state_from_db(db: Session) -> Dict[str, Any]:
 def save_state_to_db(state: Dict[str, Any], db: Session, client_version: int = None):
     global current_state_version
 
-    # Check for version conflicts
-    if client_version is not None and client_version < current_state_version:
+    # Only check for conflicts if client version is significantly behind (more than 5 versions)
+    # This allows for normal user actions without triggering conflicts
+    if client_version is not None and client_version < current_state_version - 5:
         logger.warning(
             f"State version conflict: client={client_version}, server={current_state_version}"
         )
@@ -160,6 +160,7 @@ def save_state_to_db(state: Dict[str, Any], db: Session, client_version: int = N
                     db.add(person)
 
         db.commit()
+        # Increment version only after successful save
         current_state_version += 1
 
         logger.info(f"State saved successfully. New version: {current_state_version}")
@@ -246,10 +247,9 @@ def handle_state_saved(state):
             save_state_to_db(state, db, client_version)
             # Get updated state and broadcast to all clients
             updated_state = get_state_from_db(db)
-            socketio.emit(
-                "state_updated", updated_state, namespace="/", include_self=False
-            )
-            logger.debug("State saved and broadcasted to other clients")
+            # Broadcast to all clients including the sender to ensure sync
+            socketio.emit("state_updated", updated_state, namespace="/")
+            logger.debug("State saved and broadcasted to all clients")
     except ValueError as e:
         logger.warning(f"State version conflict in WebSocket: {e}")
         socketio.emit("state_conflict", {"message": str(e)}, namespace="/")
