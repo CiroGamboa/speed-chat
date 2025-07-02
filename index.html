@@ -1133,6 +1133,10 @@
         let AUTO_RESCHEDULE_MIN = 'off';
         let alarmsEnabled = localStorage.getItem('alarmsEnabled') !== 'false'; // Default to true if not set
 
+        // Global state version tracking
+        let currentStateVersion = 0;
+        let lastStateTimestamp = 0;
+
         // Enable audio on first user interaction
         document.addEventListener('click', function enableAudio() {
             if (!audioEnabled) {
@@ -1206,6 +1210,26 @@
             console.error('WebSocket connection error:', error);
         });
 
+        // Handle connection errors
+        socket.on('connection_error', (error) => {
+            console.error('Connection error:', error);
+            alert('Failed to connect to server. Please refresh the page.');
+        });
+
+        // Handle state conflicts
+        socket.on('state_conflict', (error) => {
+            console.warn('State conflict detected:', error);
+            alert('Your changes conflict with another user\'s changes. Please refresh the page.');
+            // Request fresh state
+            socket.emit('get_state');
+        });
+
+        // Handle state errors
+        socket.on('state_error', (error) => {
+            console.error('State error:', error);
+            alert('Error updating state. Please try again.');
+        });
+
         // Listen for state updates from the server
         socket.on('state_updated', (newState) => {
             console.log('Received state update:', newState);
@@ -1213,6 +1237,12 @@
             // Prevent recursive state updates
             if (isStateUpdateInProgress) {
                 console.log('State update already in progress, skipping');
+                return;
+            }
+
+            // Check if this is a newer state
+            if (newState.timestamp && newState.timestamp <= lastStateTimestamp) {
+                console.log('Received older state, ignoring');
                 return;
             }
 
@@ -1224,6 +1254,10 @@
                     console.error('Invalid state received:', newState);
                     return;
                 }
+
+                // Update state version and timestamp
+                currentStateVersion = newState.version || 0;
+                lastStateTimestamp = newState.timestamp || 0;
 
                 // Update global variables
                 TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
@@ -1983,8 +2017,10 @@
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
             MS5 = alarmMinutes * 60 * 1000;
 
-            // Create state update
+            // Create state update with versioning
             const state = {
+                version: currentStateVersion,
+                timestamp: Date.now() / 1000,
                 config: {
                     sessionDuration: sessionMinutes.toString(),
                     alarmInterval: alarmMinutes.toString(),
@@ -2005,7 +2041,7 @@
             saveState(state);
         }
 
-        // Modify saveState function to handle real-time updates
+        // Modify saveState function to handle real-time updates with versioning
         async function saveState(stateToSave = null) {
             if (isStateUpdateInProgress) {
                 console.log('State update already in progress, skipping save');
@@ -2016,6 +2052,8 @@
 
             try {
                 const state = stateToSave || {
+                    version: currentStateVersion,
+                    timestamp: Date.now() / 1000,
                     config: {
                         sessionDuration: document.getElementById("sessionDuration")?.value || "30",
                         alarmInterval: document.getElementById("alarmInterval")?.value || "5",
@@ -2043,17 +2081,33 @@
 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    if (response.status === 409) {
+                        // State conflict - request fresh state
+                        console.warn('State conflict detected, requesting fresh state');
+                        socket.emit('get_state');
+                        throw new Error('State conflict. Please refresh and try again.');
+                    }
                     throw new Error(errorData.message || "Failed to save state");
                 }
 
                 const result = await response.json();
                 console.log('State saved successfully:', result);
 
-                // Emit state_saved event to trigger broadcast
+                // Update local state version if server returned updated state
+                if (result.state && result.state.version) {
+                    currentStateVersion = result.state.version;
+                    lastStateTimestamp = result.state.timestamp || 0;
+                }
+
+                // Emit state_saved event to trigger broadcast to other clients
                 socket.emit('state_saved', state);
             } catch (error) {
                 console.error("Error saving state:", error);
-                alert("Failed to save changes. Please try again.");
+                if (error.message.includes('conflict')) {
+                    alert("Your changes conflict with another user's changes. Please refresh the page.");
+                } else {
+                    alert("Failed to save changes. Please try again.");
+                }
             } finally {
                 isStateUpdateInProgress = false;
             }

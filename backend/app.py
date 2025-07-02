@@ -1,11 +1,14 @@
 import logging
 import os
+import time
+from contextlib import contextmanager
 from typing import Any, Dict
 
 from database import Config, Line, Person, get_db, init_db
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
+from sqlalchemy.exc import DisconnectionError, OperationalError
 from sqlalchemy.orm import Session
 
 # Configure logging
@@ -28,110 +31,172 @@ socketio = SocketIO(
     ping_interval=25,
 )
 
+# Global state version for conflict resolution
+current_state_version = 0
+
+
+@contextmanager
+def get_db_with_retry(max_retries=3, delay=1):
+    """Get database session with retry logic for connection issues"""
+    for attempt in range(max_retries):
+        try:
+            db = next(get_db())
+            yield db
+            break
+        except (OperationalError, DisconnectionError) as e:
+            logger.warning(f"Database connection attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(delay * (attempt + 1))  # Exponential backoff
+            else:
+                logger.error("All database connection attempts failed")
+                raise
+        finally:
+            try:
+                db.close()
+            except:
+                pass
+
 
 def get_state_from_db(db: Session) -> Dict[str, Any]:
-    config = db.query(Config).first()
-    if not config:
-        config = Config()
-        db.add(config)
-        db.commit()
-        db.refresh(config)
+    global current_state_version
 
-    lines = db.query(Line).all()
-    lines_data = []
-    for line in lines:
-        people_data = [{"id": person.id, "name": person.name} for person in line.people]
-        lines_data.append({"name": line.name, "time": line.time, "people": people_data})
+    try:
+        config = db.query(Config).first()
+        if not config:
+            config = Config()
+            db.add(config)
+            db.commit()
+            db.refresh(config)
 
-    return {
-        "config": {
-            "sessionDuration": config.session_duration,
-            "alarmInterval": config.alarm_interval,
-            "maxPeoplePerLine": config.max_people_per_line,
-            "blinkBeforeStart": config.blink_before_start,
-            "blinkTime": config.blink_time,
-            "finishWindow": config.finish_window,
-            "autoReschedule": config.auto_reschedule,
-            "lines": lines_data,
+        lines = db.query(Line).all()
+        lines_data = []
+        for line in lines:
+            people_data = [
+                {"id": person.id, "name": person.name} for person in line.people
+            ]
+            lines_data.append(
+                {"name": line.name, "time": line.time, "people": people_data}
+            )
+
+        current_state_version += 1
+
+        return {
+            "version": current_state_version,
+            "timestamp": time.time(),
+            "config": {
+                "sessionDuration": config.session_duration,
+                "alarmInterval": config.alarm_interval,
+                "maxPeoplePerLine": config.max_people_per_line,
+                "blinkBeforeStart": config.blink_before_start,
+                "blinkTime": config.blink_time,
+                "finishWindow": config.finish_window,
+                "autoReschedule": config.auto_reschedule,
+                "lines": lines_data,
+            },
         }
-    }
+    except Exception as e:
+        logger.error(f"Error getting state from database: {e}")
+        raise
 
 
-def save_state_to_db(state: Dict[str, Any], db: Session):
-    config_data = state.get("config", {})
+def save_state_to_db(state: Dict[str, Any], db: Session, client_version: int = None):
+    global current_state_version
 
-    # Update or create config
-    config = db.query(Config).first()
-    if not config:
-        config = Config()
-        db.add(config)
+    # Check for version conflicts
+    if client_version is not None and client_version < current_state_version:
+        logger.warning(
+            f"State version conflict: client={client_version}, server={current_state_version}"
+        )
+        raise ValueError("State is outdated. Please refresh and try again.")
 
-    config.session_duration = config_data.get("sessionDuration", "30")
-    config.alarm_interval = config_data.get("alarmInterval", "5")
-    config.max_people_per_line = config_data.get("maxPeoplePerLine", "10")
-    config.blink_before_start = config_data.get("blinkBeforeStart", False)
-    config.blink_time = config_data.get("blinkTime", "5")
-    config.finish_window = config_data.get("finishWindow", "5")
-    config.auto_reschedule = config_data.get("autoReschedule", "off")
+    try:
+        config_data = state.get("config", {})
 
-    # Update lines
-    existing_lines = {line.name: line for line in db.query(Line).all()}
-    new_lines = config_data.get("lines", [])
+        # Update or create config
+        config = db.query(Config).first()
+        if not config:
+            config = Config()
+            db.add(config)
 
-    # Remove lines that are no longer in the state
-    for line_name in list(existing_lines.keys()):
-        if not any(line["name"] == line_name for line in new_lines):
-            db.delete(existing_lines[line_name])
+        config.session_duration = config_data.get("sessionDuration", "30")
+        config.alarm_interval = config_data.get("alarmInterval", "5")
+        config.max_people_per_line = config_data.get("maxPeoplePerLine", "10")
+        config.blink_before_start = config_data.get("blinkBeforeStart", False)
+        config.blink_time = config_data.get("blinkTime", "5")
+        config.finish_window = config_data.get("finishWindow", "5")
+        config.auto_reschedule = config_data.get("autoReschedule", "off")
 
-    # Update or create lines
-    for line_data in new_lines:
-        line = existing_lines.get(line_data["name"])
-        if not line:
-            line = Line(name=line_data["name"])
-            db.add(line)
+        # Update lines
+        existing_lines = {line.name: line for line in db.query(Line).all()}
+        new_lines = config_data.get("lines", [])
 
-        line.time = line_data["time"]
+        # Remove lines that are no longer in the state
+        for line_name in list(existing_lines.keys()):
+            if not any(line["name"] == line_name for line in new_lines):
+                db.delete(existing_lines[line_name])
 
-        # Update people
-        existing_people = {p.id: p for p in line.people}
-        new_people = line_data.get("people", [])
+        # Update or create lines
+        for line_data in new_lines:
+            line = existing_lines.get(line_data["name"])
+            if not line:
+                line = Line(name=line_data["name"])
+                db.add(line)
 
-        # Remove people that are no longer in the line
-        for person_id in list(existing_people.keys()):
-            if not any(p["id"] == person_id for p in new_people):
-                db.delete(existing_people[person_id])
+            line.time = line_data["time"]
 
-        # Add new people
-        for person_data in new_people:
-            if person_data["id"] not in existing_people:
-                person = Person(name=person_data["name"], line=line)
-                db.add(person)
+            # Update people
+            existing_people = {p.id: p for p in line.people}
+            new_people = line_data.get("people", [])
 
-    db.commit()
+            # Remove people that are no longer in the line
+            for person_id in list(existing_people.keys()):
+                if not any(p["id"] == person_id for p in new_people):
+                    db.delete(existing_people[person_id])
+
+            # Add new people
+            for person_data in new_people:
+                if person_data["id"] not in existing_people:
+                    person = Person(name=person_data["name"], line=line)
+                    db.add(person)
+
+        db.commit()
+        current_state_version += 1
+
+        logger.info(f"State saved successfully. New version: {current_state_version}")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving state to database: {e}")
+        raise
 
 
 @app.route("/state", methods=["GET"])
 def get_state():
-    db = next(get_db())
     try:
-        state = get_state_from_db(db)
-        logger.debug(f"GET /state returning: {state}")
-        return jsonify(state)
-    finally:
-        db.close()
+        with get_db_with_retry() as db:
+            state = get_state_from_db(db)
+            logger.debug(f"GET /state returning: {state}")
+            return jsonify(state)
+    except Exception as e:
+        logger.error(f"Error in get_state: {e}")
+        return jsonify({"error": "Failed to get state"}), 500
 
 
 @app.route("/state", methods=["POST"])
 def update_state():
     try:
         state = request.json
+        client_version = state.get("version")
         logger.debug(f"POST /state received: {state}")
-        db = next(get_db())
-        try:
-            save_state_to_db(state, db)
-            return jsonify({"status": "success", "state": state})
-        finally:
-            db.close()
+
+        with get_db_with_retry() as db:
+            save_state_to_db(state, db, client_version)
+            # Return updated state with new version
+            updated_state = get_state_from_db(db)
+            return jsonify({"status": "success", "state": updated_state})
+    except ValueError as e:
+        logger.warning(f"State version conflict: {e}")
+        return jsonify({"status": "conflict", "message": str(e)}), 409
     except Exception as e:
         logger.error(f"Error updating state: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -140,13 +205,18 @@ def update_state():
 @socketio.on("connect")
 def handle_connect():
     logger.info("Client connected")
-    db = next(get_db())
     try:
-        state = get_state_from_db(db)
-        socketio.emit("state_updated", state, namespace="/")
-        logger.debug("Initial state sent to client")
-    finally:
-        db.close()
+        with get_db_with_retry() as db:
+            state = get_state_from_db(db)
+            socketio.emit("state_updated", state, namespace="/")
+            logger.debug("Initial state sent to client")
+    except Exception as e:
+        logger.error(f"Error sending initial state: {e}")
+        socketio.emit(
+            "connection_error",
+            {"message": "Failed to load initial state"},
+            namespace="/",
+        )
 
 
 @socketio.on("disconnect")
@@ -157,25 +227,35 @@ def handle_disconnect():
 @socketio.on("get_state")
 def handle_get_state():
     logger.info("Received get_state request")
-    db = next(get_db())
     try:
-        state = get_state_from_db(db)
-        socketio.emit("state_updated", state, namespace="/")
-        logger.debug("State sent in response to get_state request")
-    finally:
-        db.close()
+        with get_db_with_retry() as db:
+            state = get_state_from_db(db)
+            socketio.emit("state_updated", state, namespace="/")
+            logger.debug("State sent in response to get_state request")
+    except Exception as e:
+        logger.error(f"Error handling get_state: {e}")
+        socketio.emit("state_error", {"message": "Failed to get state"}, namespace="/")
 
 
 @socketio.on("state_saved")
 def handle_state_saved(state):
     logger.info("Received state_saved event")
-    db = next(get_db())
     try:
-        save_state_to_db(state, db)
-        socketio.emit("state_updated", state, namespace="/")
-        logger.debug("State saved and broadcasted")
-    finally:
-        db.close()
+        client_version = state.get("version")
+        with get_db_with_retry() as db:
+            save_state_to_db(state, db, client_version)
+            # Get updated state and broadcast to all clients
+            updated_state = get_state_from_db(db)
+            socketio.emit(
+                "state_updated", updated_state, namespace="/", include_self=False
+            )
+            logger.debug("State saved and broadcasted to other clients")
+    except ValueError as e:
+        logger.warning(f"State version conflict in WebSocket: {e}")
+        socketio.emit("state_conflict", {"message": str(e)}, namespace="/")
+    except Exception as e:
+        logger.error(f"Error handling state_saved: {e}")
+        socketio.emit("state_error", {"message": "Failed to save state"}, namespace="/")
 
 
 if __name__ == "__main__":
