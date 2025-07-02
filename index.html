@@ -706,6 +706,9 @@
             font-weight: bold;
             color: #8f0057;
             margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .people-list {
@@ -1543,7 +1546,10 @@
                         </div>
                         <div class="people-management">
                             <div class="people-count">
-                                People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}
+                                <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
+                                ${currentRole !== 'viewer' ? `
+                                    <button type="button" onclick="clearPeople(${config.id})" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                ` : ''}
                             </div>
                             <div class="people-list">
                                 ${config.people && config.people.length > 0
@@ -1735,7 +1741,10 @@
                     </div>
                     <div class="people-management">
                         <div class="people-count">
-                            People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}
+                            <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
+                            ${currentRole !== 'viewer' ? `
+                                <button type="button" onclick="clearPeople(${config.id})" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                            ` : ''}
                         </div>
                         <div class="people-list">
                             ${config.people && config.people.length > 0
@@ -2290,6 +2299,46 @@
             setTimeout(() => {
                 isUpdatingUI = false;
             }, 1000);
+        }
+
+        function clearPeople(lineId) {
+            if (currentRole === 'viewer') return;
+
+            if (confirm('Are you sure you want to clear all people from this line?')) {
+                isUpdatingUI = true;  // Set flag before UI update
+                const config = lineConfigs.find(c => c.id === lineId);
+                if (!config) return;
+
+                config.people = [];
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        }))
+                    }
+                };
+                saveState(state);
+
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    isUpdatingUI = false;
+                }, 1000);
+            }
         }
 
         function handlePersonInput(event, lineId) {
