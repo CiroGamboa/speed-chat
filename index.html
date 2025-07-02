@@ -53,6 +53,7 @@
             display: flex;
             flex-direction: column;
             align-items: flex-end;
+            z-index: 4000;
         }
 
         .config-header {
@@ -127,6 +128,7 @@
             .config-section.visible {
                 display: flex !important;
                 background: rgba(0, 0, 0, 0.5);
+                z-index: 4000;
             }
 
             .config-content.visible {
@@ -195,6 +197,22 @@
 
             body {
                 padding: 1rem 0;
+            }
+
+            /* Hide alarm toggle when config is open on mobile */
+            .config-section.visible~.alarm-toggle-container {
+                display: none !important;
+            }
+
+            /* Alternative: hide alarm toggle when config is visible */
+            .config-section.visible+.alarm-toggle-container {
+                display: none !important;
+            }
+
+            /* Most reliable: hide alarm toggle when any config section is visible */
+            .config-section.visible~* .alarm-toggle-container,
+            .config-section.visible+* .alarm-toggle-container {
+                display: none !important;
             }
         }
 
@@ -1399,10 +1417,20 @@
             const section = document.getElementById('configSection');
             const content = document.getElementById('configContent');
             const header = document.querySelector('.config-header');
+            const alarmToggle = document.querySelector('.alarm-toggle-container');
 
             section.classList.toggle('visible');
             content.classList.toggle('visible');
             header.classList.toggle('open');
+
+            // Hide/show alarm toggle on mobile when config is opened/closed
+            if (window.innerWidth <= 767) {
+                if (section.classList.contains('visible')) {
+                    alarmToggle.style.display = 'none';
+                } else {
+                    alarmToggle.style.display = 'flex';
+                }
+            }
         }
 
         // Initialize config section state
