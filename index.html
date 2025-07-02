@@ -1907,8 +1907,13 @@
 
         function parseTime(hm) {
             const [h, m] = hm.split(':').map(Number);
+            const now = new Date();
             const d = new Date();
             d.setHours(h, m, 0, 0);
+            if (d.getTime() <= now.getTime()) {
+                // If the selected time is in the past, add 1 day
+                d.setDate(d.getDate() + 1);
+            }
             return d.getTime();
         }
 
@@ -2079,19 +2084,19 @@
                         const elapsed = now - startT;
 
                         // Clear people when timer starts
-                        if (elapsed < 1000) { // Within first second of starting
-                            const config = lineConfigs.find(c => c.id === parseInt(line));
-                            if (config) {
-                                config.people = [];
-                                // Update the people panel immediately
-                                const peoplePanel = timerContainer.querySelector('.people-panel .people-list');
-                                if (peoplePanel) {
-                                    peoplePanel.innerHTML = '<div class="empty-message">No one here yet</div>';
-                                }
-                                // Save state after clearing people
-                                saveState();
-                            }
-                        }
+                        // if (elapsed < 1000) { // Within first second of starting
+                        //     const config = lineConfigs.find(c => c.id === parseInt(line));
+                        //     if (config) {
+                        //         config.people = [];
+                        //         // Update the people panel immediately
+                        //         const peoplePanel = timerContainer.querySelector('.people-panel .people-list');
+                        //         if (peoplePanel) {
+                        //             peoplePanel.innerHTML = '<div class="empty-message">No one here yet</div>';
+                        //         }
+                        //         // Save state after clearing people
+                        //         saveState();
+                        //     }
+                        // }
 
                         if (elapsed >= TOTAL_SESSION_TIME) {
                             countElement.textContent = "00:00";
