@@ -993,14 +993,14 @@
             width: 100%;
             margin: 0.5rem 0;
             padding: 0.5rem;
-            background: #f0f8ff;
+            background: #fafafa;
             border-radius: 4px;
-            border: 1px solid #87ceeb;
+            border: 1px solid #ff97d7;
         }
 
         .wait-queue-title {
             font-weight: bold;
-            color: #0066cc;
+            color: #8f0057;
             margin-bottom: 0.5rem;
             display: flex;
             justify-content: space-between;
@@ -1009,7 +1009,7 @@
 
         .wait-queue-count {
             font-size: 0.8rem;
-            color: #0066cc;
+            color: #8f0057;
             margin-bottom: 0.5rem;
         }
 
@@ -1027,13 +1027,13 @@
             background: #fff;
             padding: 0.25rem 0.5rem;
             border-radius: 4px;
-            border: 1px solid #87ceeb;
+            border: 1px solid #ff97d7;
         }
 
         .wait-queue-entry button {
             background: none;
             border: none;
-            color: #0066cc;
+            color: #8f0057;
             cursor: pointer;
             font-size: 1.2rem;
             padding: 0 0.25rem;
@@ -1041,7 +1041,7 @@
         }
 
         .wait-queue-entry button:hover {
-            color: #87ceeb;
+            color: #ff97d7;
         }
 
         .add-wait-queue {
@@ -1052,12 +1052,12 @@
         .add-wait-queue input {
             flex: 1;
             padding: 0.5rem;
-            border: 1px solid #87ceeb;
+            border: 1px solid #ff97d7;
             border-radius: 4px;
         }
 
         .add-wait-queue button {
-            background: #0066cc;
+            background: #8f0057;
             color: white;
             border: none;
             padding: 0.5rem 1rem;
@@ -1066,11 +1066,11 @@
         }
 
         .add-wait-queue button:hover {
-            background: #87ceeb;
+            background: #ff97d7;
         }
 
         .promote-button {
-            background: #28a745;
+            background: #8f0057;
             color: white;
             border: none;
             padding: 0.5rem 1rem;
@@ -1082,7 +1082,7 @@
         }
 
         .promote-button:hover {
-            background: #20c997;
+            background: #ff97d7;
         }
 
         .promote-button:disabled {
@@ -1098,24 +1098,27 @@
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
-            border: 2px solid #87ceeb;
+            border: 2px solid #ff97d7;
             min-height: 60px;
         }
 
         .wait-queue-panel .title {
             font-size: 0.9rem;
-            color: #0066cc;
+            color: #8f0057;
             margin-bottom: 0.5rem;
             font-weight: bold;
         }
 
         .wait-queue-panel .queue-info {
             font-size: 0.8rem;
-            color: #0066cc;
+            color: #8f0057;
             margin-bottom: 0.5rem;
         }
 
         .wait-queue-panel .queue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
             font-size: 0.9rem;
             color: #4a4949;
             line-height: 1.4;
@@ -1127,8 +1130,8 @@
             font-style: italic;
         }
 
-        .timer.blinking {
-            animation: blink 1s infinite;
+        .wait-queue-entry .person-order {
+            color: #8f0057;
         }
     </style>
 </head>
