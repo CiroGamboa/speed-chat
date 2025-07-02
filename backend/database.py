@@ -56,6 +56,9 @@ class Line(Base):
     name = Column(String)
     time = Column(String)
     people = relationship("Person", back_populates="line", cascade="all, delete-orphan")
+    wait_queue = relationship(
+        "WaitQueuePerson", back_populates="line", cascade="all, delete-orphan"
+    )
 
 
 class Person(Base):
@@ -66,6 +69,16 @@ class Person(Base):
     name = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     line = relationship("Line", back_populates="people")
+
+
+class WaitQueuePerson(Base):
+    __tablename__ = "wait_queue_people"
+
+    id = Column(Integer, primary_key=True, index=True)
+    line_id = Column(Integer, ForeignKey("lines.id"))
+    name = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    line = relationship("Line", back_populates="wait_queue")
 
 
 # Create all tables

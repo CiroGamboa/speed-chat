@@ -185,6 +185,11 @@
                 margin: 0.5rem auto 0 !important;
             }
 
+            .wait-queue-panel {
+                width: 200px !important;
+                margin: 0.5rem auto 0 !important;
+            }
+
             #timers-container {
                 display: flex;
                 flex-direction: column;
@@ -963,6 +968,149 @@
         .toggle-switch input:checked+label:before {
             transform: translateX(16px);
         }
+
+        /* Wait Queue Styles */
+        .wait-queue-management {
+            width: 100%;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: #f0f8ff;
+            border-radius: 4px;
+            border: 1px solid #87ceeb;
+        }
+
+        .wait-queue-title {
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .wait-queue-count {
+            font-size: 0.8rem;
+            color: #0066cc;
+            margin-bottom: 0.5rem;
+        }
+
+        .wait-queue-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .wait-queue-entry {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #fff;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #87ceeb;
+        }
+
+        .wait-queue-entry button {
+            background: none;
+            border: none;
+            color: #0066cc;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 0.25rem;
+            line-height: 1;
+        }
+
+        .wait-queue-entry button:hover {
+            color: #87ceeb;
+        }
+
+        .add-wait-queue {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .add-wait-queue input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #87ceeb;
+            border-radius: 4px;
+        }
+
+        .add-wait-queue button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .add-wait-queue button:hover {
+            background: #87ceeb;
+        }
+
+        .promote-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+
+        .promote-button:hover {
+            background: #20c997;
+        }
+
+        .promote-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .wait-queue-panel {
+            width: 200px;
+            margin-top: 0.5rem;
+            padding: 0.75rem;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 2px solid #87ceeb;
+            min-height: 60px;
+        }
+
+        .wait-queue-panel .title {
+            font-size: 0.9rem;
+            color: #0066cc;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .wait-queue-panel .queue-info {
+            font-size: 0.8rem;
+            color: #0066cc;
+            margin-bottom: 0.5rem;
+        }
+
+        .wait-queue-panel .queue-list {
+            font-size: 0.9rem;
+            color: #4a4949;
+            line-height: 1.4;
+        }
+
+        .wait-queue-panel .empty-message {
+            font-size: 0.9rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        .timer.blinking {
+            animation: blink 1s infinite;
+        }
     </style>
 </head>
 
@@ -1298,7 +1446,8 @@
                     id: index + 1,
                     name: line.name,
                     time: line.time || '',
-                    people: line.people || []
+                    people: line.people || [],
+                    waitQueue: line.waitQueue || []
                 }));
 
                 // Update scheduledTimes based on lineConfigs
@@ -1402,6 +1551,42 @@
                                 </div>
                             ` : ''}
                         </div>
+                        <div class="wait-queue-management">
+                            <div class="wait-queue-title">
+                                <span>Wait Queue</span>
+                                ${currentRole !== 'viewer' ? `
+                                    <button type="button" onclick="clearWaitQueue(${config.id})" style="background: none; border: none; color: #0066cc; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                ` : ''}
+                            </div>
+                            <div class="wait-queue-count">
+                                People: ${config.waitQueue ? config.waitQueue.length : 0} (no limit)
+                            </div>
+                            <div class="wait-queue-list">
+                                ${(config.waitQueue || []).map(person => `
+                                    <div class="wait-queue-entry">
+                                        <span>${person.name}</span>
+                                        ${currentRole !== 'viewer' ? `
+                                            <button type="button" onclick="removeFromWaitQueue(${config.id}, ${person.id})">×</button>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ${currentRole !== 'viewer' ? `
+                                <div class="add-wait-queue">
+                                    <input type="text" 
+                                           id="newWaitQueuePerson${config.id}" 
+                                           placeholder="Add person to wait queue"
+                                           onkeypress="handleWaitQueueInput(event, ${config.id})">
+                                    <button type="button" onclick="addToWaitQueue(${config.id})">Add</button>
+                                </div>
+                                <button type="button" 
+                                        class="promote-button" 
+                                        onclick="promoteFromWaitQueue(${config.id})"
+                                        ${(!config.waitQueue || config.waitQueue.length === 0) ? 'disabled' : ''}>
+                                    Promote to Line
+                                </button>
+                            ` : ''}
+                        </div>
                         ${currentRole === 'admin' ? `
                             <div class="line-buttons">
                                 <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
@@ -1454,7 +1639,8 @@
                 id: lineId,
                 name: `Line ${nextNumber}`,
                 time: '',
-                people: []
+                people: [],
+                waitQueue: []
             };
             lineConfigs.push(lineConfig);
             updateLineConfigs();
@@ -1474,7 +1660,8 @@
                     lines: lineConfigs.map(config => ({
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     }))
                 }
             };
@@ -1499,7 +1686,8 @@
                     lines: lineConfigs.map(config => ({
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     }))
                 }
             };
@@ -1550,6 +1738,42 @@
                             </div>
                         ` : ''}
                     </div>
+                    <div class="wait-queue-management">
+                        <div class="wait-queue-title">
+                            <span>Wait Queue</span>
+                            ${currentRole !== 'viewer' ? `
+                                <button type="button" onclick="clearWaitQueue(${config.id})" style="background: none; border: none; color: #0066cc; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                            ` : ''}
+                        </div>
+                        <div class="wait-queue-count">
+                            People: ${config.waitQueue ? config.waitQueue.length : 0} (no limit)
+                        </div>
+                        <div class="wait-queue-list">
+                            ${(config.waitQueue || []).map(person => `
+                                <div class="wait-queue-entry">
+                                    <span>${person.name}</span>
+                                    ${currentRole !== 'viewer' ? `
+                                        <button type="button" onclick="removeFromWaitQueue(${config.id}, ${person.id})">×</button>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                        ${currentRole !== 'viewer' ? `
+                            <div class="add-wait-queue">
+                                <input type="text" 
+                                       id="newWaitQueuePerson${config.id}" 
+                                       placeholder="Add person to wait queue"
+                                       onkeypress="handleWaitQueueInput(event, ${config.id})">
+                                <button type="button" onclick="addToWaitQueue(${config.id})">Add</button>
+                            </div>
+                            <button type="button" 
+                                    class="promote-button" 
+                                    onclick="promoteFromWaitQueue(${config.id})"
+                                    ${(!config.waitQueue || config.waitQueue.length === 0) ? 'disabled' : ''}>
+                                Promote to Line
+                            </button>
+                        ` : ''}
+                    </div>
                     ${currentRole === 'admin' ? `
                         <div class="line-buttons">
                             <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
@@ -1579,7 +1803,8 @@
                         lines: lineConfigs.map(config => ({
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         }))
                     }
                 };
@@ -1609,7 +1834,8 @@
                         lines: lineConfigs.map(config => ({
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         }))
                     }
                 };
@@ -1756,6 +1982,22 @@
                                     </div>
                                 `).join('')
                     : '<div class="empty-message">No one here yet</div>'
+                }
+                        </div>
+                    </div>
+                    <div class="wait-queue-panel">
+                        <div class="title">Wait Queue</div>
+                        <div class="queue-info">
+                            ${config.waitQueue ? config.waitQueue.length : 0} people waiting
+                        </div>
+                        <div class="queue-list">
+                            ${config.waitQueue && config.waitQueue.length > 0
+                    ? config.waitQueue.map(person => `
+                                    <div class="person-entry">
+                                        <span>${person.name}</span>
+                                    </div>
+                                `).join('')
+                    : '<div class="empty-message">No one waiting</div>'
                 }
                         </div>
                     </div>
@@ -1953,12 +2195,13 @@
                         lines: lineConfigs.map(config => ({
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         }))
                     }
                 };
                 saveState(state);
-            } else if (config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
+            } else if (name && config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
                 alert(`Maximum number of people (${MAX_PEOPLE_PER_LINE}) reached for this line`);
             }
 
@@ -1993,7 +2236,8 @@
                     lines: lineConfigs.map(config => ({
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     }))
                 }
             };
@@ -2009,6 +2253,188 @@
             if (event.key === 'Enter') {
                 event.preventDefault();
                 addPerson(lineId);
+            }
+        }
+
+        // Wait Queue Management Functions
+        function addToWaitQueue(lineId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config) return;
+
+            const input = document.getElementById(`newWaitQueuePerson${lineId}`);
+            const name = input.value.trim();
+
+            if (name) {
+                if (!config.waitQueue) config.waitQueue = [];
+                config.waitQueue.push({
+                    id: Date.now(),
+                    name: name
+                });
+                input.value = '';
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        }))
+                    }
+                };
+                saveState(state);
+            }
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function removeFromWaitQueue(lineId, personId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config || !config.waitQueue) return;
+
+            config.waitQueue = config.waitQueue.filter(p => p.id !== personId);
+            updateLineConfigs();
+            updateTimers();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    }))
+                }
+            };
+            saveState(state);
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function clearWaitQueue(lineId) {
+            if (currentRole === 'viewer') return;
+
+            if (confirm('Are you sure you want to clear the entire wait queue?')) {
+                isUpdatingUI = true;  // Set flag before UI update
+                const config = lineConfigs.find(c => c.id === lineId);
+                if (!config) return;
+
+                config.waitQueue = [];
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        }))
+                    }
+                };
+                saveState(state);
+
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    isUpdatingUI = false;
+                }, 1000);
+            }
+        }
+
+        function promoteFromWaitQueue(lineId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config || !config.waitQueue || config.waitQueue.length === 0) return;
+
+            // Clear current people in the line
+            config.people = [];
+
+            // Move people from wait queue to line (up to the limit)
+            const peopleToPromote = Math.min(config.waitQueue.length, MAX_PEOPLE_PER_LINE);
+            const promotedPeople = config.waitQueue.slice(0, peopleToPromote);
+            const remainingInQueue = config.waitQueue.slice(peopleToPromote);
+
+            config.people = promotedPeople;
+            config.waitQueue = remainingInQueue;
+
+            updateLineConfigs();
+            updateTimers();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    }))
+                }
+            };
+            saveState(state);
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function handleWaitQueueInput(event, lineId) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addToWaitQueue(lineId);
             }
         }
 
@@ -2112,6 +2538,10 @@
         });
 
         // Load saved state when page loads
+        function loadSavedState() {
+            // Request initial state from server
+            socket.emit('get_state');
+        }
         loadSavedState();
 
         // Password protection
@@ -2175,7 +2605,8 @@
                     lines: lineConfigs.map(config => ({
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     }))
                 }
             };
@@ -2208,7 +2639,8 @@
                         lines: lineConfigs.map(config => ({
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         }))
                     }
                 };
