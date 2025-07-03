@@ -1167,6 +1167,11 @@
         </div>
     </div>
 
+    <div id="currentTimeDisplay"
+        style="position: fixed; top: 4rem; left: 1rem; background: #fff; padding: 0.5rem; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); border: 2px solid #ff97d7; font-size: 0.9rem; color: #8f0057; font-weight: bold; z-index: 3000;">
+        <span id="currentTime">--:--</span>
+    </div>
+
     <div class="notification-overlay" id="notificationOverlay"></div>
     <div class="notification" id="changeSeatNotification">
         Change seat, go to the left
@@ -2961,6 +2966,24 @@
                 });
             }
         });
+
+        // Update current time display
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const timeElement = document.getElementById('currentTime');
+            if (timeElement) {
+                timeElement.textContent = timeString;
+            }
+        }
+
+        // Initialize and update current time
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
     </script>
 </body>
 
