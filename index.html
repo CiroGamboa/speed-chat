@@ -1316,6 +1316,10 @@
                 <div class="wait-queue-count">
                     People: <span id="generalWaitQueueCount">0</span> (no limit)
                 </div>
+                <div class="next-line-info" id="nextLineInfo"
+                    style="font-size: 0.8rem; color: #8f0057; margin-bottom: 0.5rem; font-style: italic;">
+                    <!-- Next line information will be displayed here -->
+                </div>
                 <div class="wait-queue-list" id="generalWaitQueueList">
                     <!-- People will be rendered here -->
                 </div>
@@ -1659,6 +1663,9 @@
 
             // Render general wait queue
             renderGeneralWaitQueue();
+
+            // Update next line information
+            updateNextLineInfo();
         }
 
         function toggleConfig() {
@@ -2147,6 +2154,9 @@
                 setInterval(update, 200);
                 update();
             });
+
+            // Update next line information when timers are updated
+            updateNextLineInfo();
         }
 
         function addPerson(lineId) {
@@ -2990,6 +3000,79 @@
             }
             return d.getTime();
         }
+
+        // Function to update next line information
+        function updateNextLineInfo() {
+            const nextLineInfoElement = document.getElementById('nextLineInfo');
+            if (!nextLineInfoElement) return;
+
+            const now = Date.now();
+            let nextLineToStart = null;
+            let nextLineToFinish = null;
+            let minTimeToStart = Infinity;
+            let minTimeToFinish = Infinity;
+
+            // Find the line that will start next and the line that will finish next
+            lineConfigs.forEach(config => {
+                if (config.time && scheduledTimes[config.id]) {
+                    const startTime = scheduledTimes[config.id];
+                    const endTime = startTime + TOTAL_SESSION_TIME;
+
+                    // Check if this line hasn't started yet
+                    if (startTime > now) {
+                        const timeToStart = startTime - now;
+                        if (timeToStart < minTimeToStart) {
+                            minTimeToStart = timeToStart;
+                            nextLineToStart = config;
+                        }
+                    }
+
+                    // Check if this line is currently running and will finish soon
+                    if (startTime <= now && endTime > now) {
+                        const timeToFinish = endTime - now;
+                        if (timeToFinish < minTimeToFinish) {
+                            minTimeToFinish = timeToFinish;
+                            nextLineToFinish = config;
+                        }
+                    }
+                }
+            });
+
+            // Display the appropriate information
+            if (nextLineToStart && minTimeToStart !== Infinity) {
+                const minutesToStart = Math.floor(minTimeToStart / 60000);
+                const displayMinutes = minutesToStart < 1 ? "< 1" : minutesToStart;
+                nextLineInfoElement.textContent = `Next: ${nextLineToStart.name} starts in ${displayMinutes} min`;
+            } else if (nextLineToFinish && minTimeToFinish !== Infinity) {
+                const minutesToFinish = Math.floor(minTimeToFinish / 60000);
+                const displayMinutes = minutesToFinish < 1 ? "< 1" : minutesToFinish;
+                nextLineInfoElement.textContent = `${nextLineToFinish.name} finishes in ${displayMinutes} min`;
+            } else {
+                // Check if any lines are scheduled for later today
+                const futureLines = lineConfigs.filter(config =>
+                    config.time && scheduledTimes[config.id] && scheduledTimes[config.id] > now
+                );
+
+                if (futureLines.length > 0) {
+                    // Find the earliest future line
+                    const earliestFutureLine = futureLines.reduce((earliest, current) => {
+                        return scheduledTimes[current.id] < scheduledTimes[earliest.id] ? current : earliest;
+                    });
+                    const timeToStart = scheduledTimes[earliestFutureLine.id] - now;
+                    const minutesToStart = Math.floor(timeToStart / 60000);
+                    const displayMinutes = minutesToStart < 1 ? "< 1" : minutesToStart;
+                    nextLineInfoElement.textContent = `Next: ${earliestFutureLine.name} starts in ${displayMinutes} min`;
+                } else {
+                    nextLineInfoElement.textContent = "No lines scheduled";
+                }
+            }
+        }
+
+        // Update next line information every 30 seconds
+        setInterval(updateNextLineInfo, 30000);
+
+        // Initial update
+        setTimeout(updateNextLineInfo, 1000);
     </script>
 </body>
 
