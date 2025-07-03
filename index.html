@@ -2033,8 +2033,9 @@
 
                     if (now < startT) {
                         const timeUntilStart = startT - now;
-                        const minutesUntilStart = Math.ceil(timeUntilStart / 60000);
-                        countElement.innerHTML = `Starting in ${minutesUntilStart} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
+                        const minutesUntilStart = Math.floor(timeUntilStart / 60000);
+                        const displayMinutes = minutesUntilStart < 1 ? "< 1" : minutesUntilStart;
+                        countElement.innerHTML = `Starting in ${displayMinutes} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
                         countElement.classList.add('starting-text');
                         timer.classList.remove('finish-window');
 
@@ -2046,30 +2047,12 @@
                         }
 
                         status = 'inactive';
-                    } else if (now > startT + TOTAL_SESSION_TIME) {
-                        // If the scheduled time is in the past and session is over, show 00:00 and do not reschedule
-                        countElement.textContent = "00:00";
-                        timer.classList.remove('finish-window');
-                        status = 'inactive';
                     } else {
                         countElement.classList.remove('starting-text');
                         timer.classList.remove('blinking');
                         const elapsed = now - startT;
 
-                        // Clear people when timer starts
-                        // if (elapsed < 1000) { // Within first second of starting
-                        //     const config = lineConfigs.find(c => c.id === parseInt(line));
-                        //     if (config) {
-                        //         config.people = [];
-                        //         // Update the people panel immediately
-                        //         const peoplePanel = timerContainer.querySelector('.people-panel .people-list');
-                        //         if (peoplePanel) {
-                        //             peoplePanel.innerHTML = '<div class="empty-message">No one here yet</div>';
-                        //         }
-                        //         // Save state after clearing people
-                        //         saveState();
-                        //     }
-                        // }
+                        // Reset auto reschedule flag logic removed
 
                         if (elapsed >= TOTAL_SESSION_TIME) {
                             countElement.textContent = "00:00";
@@ -2078,9 +2061,10 @@
 
                             // Check auto reschedule setting
                             const autoRescheduleValue = document.getElementById('autoReschedule').value;
+                            const config = lineConfigs.find(c => c.id === parseInt(line));
                             if (autoRescheduleValue !== 'off') {
-                                // Reschedule timer for now + autoRescheduleValue minutes
-                                const nextStart = Date.now() + parseInt(autoRescheduleValue) * 60 * 1000;
+                                // Reschedule timer for now + autoRescheduleValue minutes, rounded to next 5-min slot
+                                const nextStart = getNextFiveMinuteSlot(Date.now(), parseInt(autoRescheduleValue));
                                 scheduledTimes[line] = nextStart;
                                 if (config) {
                                     config.time = formatTime(new Date(nextStart));
@@ -2105,32 +2089,6 @@
 
                             // Save state after all updates
                             saveState();
-
-                            // Update the timer container if auto reschedule is off
-                            if (autoRescheduleValue === 'off') {
-                                const configIndex = lineConfigs.findIndex(c => c.id === parseInt(line));
-                                if (configIndex !== -1) {
-                                    const newTimerContainer = document.createElement('div');
-                                    newTimerContainer.innerHTML = `
-                                        <div class="timer-container" data-line="${config.id}">
-                                            <div class="timer" data-line="${config.id}">
-                                                <div class="label">${config.name}</div>
-                                                <div class="count">00:00</div>
-                                            </div>
-                                            <div class="people-panel">
-                                                <div class="title">People for next Line</div>
-                                                <div class="seats-info">
-                                                    0/${MAX_PEOPLE_PER_LINE} seats
-                                                </div>
-                                                <div class="people-list">
-                                                    <div class="empty-message">No one here yet</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                    timerContainer.replaceWith(newTimerContainer.firstElementChild);
-                                }
-                            }
                         } else {
                             remaining = TOTAL_SESSION_TIME - elapsed;
                             const mm = Math.floor(remaining / 60000);
@@ -3005,6 +2963,21 @@
         // Initialize and update current time
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
+
+        // Helper to get the next 5-minute slot after a given interval
+        function getNextFiveMinuteSlot(baseTime, intervalMinutes) {
+            const d = new Date(baseTime + intervalMinutes * 60 * 1000);
+            d.setSeconds(0, 0);
+            const minutes = d.getMinutes();
+            const next5 = Math.ceil(minutes / 5) * 5;
+            if (next5 === 60) {
+                d.setHours(d.getHours() + 1);
+                d.setMinutes(0);
+            } else {
+                d.setMinutes(next5);
+            }
+            return d.getTime();
+        }
     </script>
 </body>
 
