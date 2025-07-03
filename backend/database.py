@@ -62,7 +62,7 @@ class Person(Base):
     __tablename__ = "people"
 
     id = Column(Integer, primary_key=True, index=True)
-    line_id = Column(Integer, ForeignKey("lines.id"))
+    line_id = Column(Integer, ForeignKey("lines.id", ondelete="CASCADE"))
     name = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     line = relationship("Line", back_populates="people")
@@ -72,6 +72,17 @@ class GeneralWaitQueue(Base):
     __tablename__ = "general_wait_queue"
 
     id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WaitQueuePerson(Base):
+    __tablename__ = "wait_queue_people"
+
+    id = Column(Integer, primary_key=True, index=True)
+    line_id = Column(
+        Integer, ForeignKey("lines.id", ondelete="CASCADE", onupdate="CASCADE")
+    )
     name = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
