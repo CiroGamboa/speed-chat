@@ -1288,6 +1288,8 @@
                 </select>
             </div>
 
+            <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
+
             <div id="generalWaitQueueSection" class="wait-queue-management">
                 <div class="wait-queue-title">
                     <span>General Wait Queue</span>
@@ -1308,7 +1310,6 @@
                 <div id="bulkPromoteButtons" style="margin-top: 0.5rem;"></div>
             </div>
 
-            <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
             <form id="scheduleForm">
                 <div id="linesContainer">
                     <!-- Line configurations will be added here -->
@@ -2816,7 +2817,7 @@
             });
             // Bulk promote buttons
             bulkPromote.innerHTML = lineConfigs.map(line => `
-                <button type="button" style="margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote to ${line.name}</button>
+                <button type="button" style="margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote all to ${line.name}</button>
             `).join('');
         }
 
