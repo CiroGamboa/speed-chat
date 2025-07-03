@@ -1588,6 +1588,11 @@
                     ).join('')}
                             </select>
                         </div>
+                        ${config.time ? `
+                            <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: #f0f0f0; border-radius: 4px; font-size: 0.9rem; color: #8f0057; font-weight: bold;">
+                                Start time: ${config.time}
+                            </div>
+                        ` : ''}
                         <div class="people-management">
                             <div class="people-count">
                                 <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
@@ -1749,6 +1754,11 @@
             ).join('')}
                         </select>
                     </div>
+                    ${config.time ? `
+                        <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: #f0f0f0; border-radius: 4px; font-size: 0.9rem; color: #8f0057; font-weight: bold;">
+                            Start time: ${config.time}
+                        </div>
+                    ` : ''}
                     <div class="people-management">
                         <div class="people-count">
                             <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
