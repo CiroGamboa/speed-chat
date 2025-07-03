@@ -4,7 +4,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Dict
 
-from database import Config, Line, Person, WaitQueuePerson, get_db, init_db
+from database import Config, GeneralWaitQueue, Line, Person, get_db, init_db
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -74,17 +74,19 @@ def get_state_from_db(db: Session) -> Dict[str, Any]:
             people_data = [
                 {"id": person.id, "name": person.name} for person in line.people
             ]
-            wait_queue_data = [
-                {"id": person.id, "name": person.name} for person in line.wait_queue
-            ]
             lines_data.append(
                 {
                     "name": line.name,
                     "time": line.time,
                     "people": people_data,
-                    "waitQueue": wait_queue_data,
                 }
             )
+
+        # Get general wait queue
+        general_wait_queue = db.query(GeneralWaitQueue).all()
+        wait_queue_data = [
+            {"id": person.id, "name": person.name} for person in general_wait_queue
+        ]
 
         # Don't increment version on read operations
         return {
@@ -99,6 +101,7 @@ def get_state_from_db(db: Session) -> Dict[str, Any]:
                 "finishWindow": config.finish_window,
                 "autoReschedule": config.auto_reschedule,
                 "lines": lines_data,
+                "generalWaitQueue": wait_queue_data,
             },
         }
     except Exception as e:
@@ -167,22 +170,20 @@ def save_state_to_db(state: Dict[str, Any], db: Session, client_version: int = N
                     person = Person(name=person_data["name"], line=line)
                     db.add(person)
 
-            # Update wait queue
-            existing_wait_queue = {p.id: p for p in line.wait_queue}
-            new_wait_queue = line_data.get("waitQueue", [])
+        # Update general wait queue
+        existing_wait_queue = {p.id: p for p in db.query(GeneralWaitQueue).all()}
+        new_wait_queue = config_data.get("generalWaitQueue", [])
 
-            # Remove wait queue people that are no longer in the queue
-            for person_id in list(existing_wait_queue.keys()):
-                if not any(p["id"] == person_id for p in new_wait_queue):
-                    db.delete(existing_wait_queue[person_id])
+        # Remove wait queue people that are no longer in the queue
+        for person_id in list(existing_wait_queue.keys()):
+            if not any(p["id"] == person_id for p in new_wait_queue):
+                db.delete(existing_wait_queue[person_id])
 
-            # Add new wait queue people
-            for person_data in new_wait_queue:
-                if person_data["id"] not in existing_wait_queue:
-                    wait_queue_person = WaitQueuePerson(
-                        name=person_data["name"], line=line
-                    )
-                    db.add(wait_queue_person)
+        # Add new wait queue people
+        for person_data in new_wait_queue:
+            if person_data["id"] not in existing_wait_queue:
+                wait_queue_person = GeneralWaitQueue(name=person_data["name"])
+                db.add(wait_queue_person)
 
         db.commit()
         # Increment version only after successful save
