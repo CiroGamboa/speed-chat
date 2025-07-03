@@ -194,12 +194,11 @@
 
             #timers-container {
                 display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 1rem;
-                margin: 0;
-                padding: 0;
-                width: 100%;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 2rem;
+                margin: 0 -1rem;
+                align-items: flex-start;
             }
 
             body {
@@ -636,6 +635,7 @@
             justify-content: center;
             gap: 2rem;
             margin: 0 -1rem;
+            align-items: flex-start;
         }
 
         @media (min-width: 1200px) {
@@ -1498,8 +1498,8 @@
                 document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
 
                 // Update lineConfigs and scheduledTimes
-                lineConfigs = newState.config.lines.map((line, index) => ({
-                    id: index + 1,
+                lineConfigs = newState.config.lines.map((line) => ({
+                    id: line.id, // Use the ID from the server
                     name: line.name,
                     time: line.time || '',
                     people: line.people || []
@@ -1978,8 +1978,8 @@
 
         function updateTimers() {
             // Create timer containers without individual wait queues
-            const timerHTML = lineConfigs.map(config => `
-                <div class="timer-container" data-line="${config.id}">
+            const timerHTML = lineConfigs.map((config, index) => `
+                <div class="timer-container" data-line="${config.id}" style="order: ${index};">
                     <div class="timer" data-line="${config.id}">
                         <div class="label">${config.name}</div>
                         <div class="count">00:00</div>

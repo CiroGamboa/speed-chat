@@ -76,6 +76,7 @@ def get_state_from_db(db: Session) -> Dict[str, Any]:
             ]
             lines_data.append(
                 {
+                    "id": line.id,
                     "name": line.name,
                     "time": line.time,
                     "people": people_data,
