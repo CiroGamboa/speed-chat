@@ -1370,6 +1370,8 @@
         let currentStateVersion = 0;
         let lastStateTimestamp = 0;
 
+        let lineOrder = [];
+
         // Enable audio on first user interaction
         document.addEventListener('click', function enableAudio() {
             if (!audioEnabled) {
@@ -1509,12 +1511,22 @@
                 document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
 
                 // Update lineConfigs and scheduledTimes
-                lineConfigs = newState.config.lines.map((line) => ({
+                const newLines = newState.config.lines.map((line) => ({
                     id: line.id, // Use the ID from the server
                     name: line.name,
                     time: line.time || '',
                     people: line.people || []
                 }));
+                // If this is the first load, or if lines were added/removed, update lineOrder
+                if (
+                    lineOrder.length === 0 ||
+                    newLines.length !== lineOrder.length ||
+                    !lineOrder.every(id => newLines.some(line => line.id === id))
+                ) {
+                    lineOrder = newLines.map(line => line.id);
+                }
+                // Always reorder newLines to match lineOrder
+                lineConfigs = lineOrder.map(id => newLines.find(line => line.id === id));
 
                 // Update general wait queue
                 generalWaitQueue = newState.config.generalWaitQueue || [];
