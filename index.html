@@ -2805,19 +2805,21 @@
                 entry.innerHTML = `
                     <span class="person-order">${idx + 1}.</span>
                     <span>${person.name}</span>
-                    <span style="margin-left: 0.5rem;"></span>
-                    <span class="promote-dropdown" style="margin-left: 0.5rem;">
-                        ${lineConfigs.map(line => `
-                            <button type="button" style="margin-right: 0.25rem;" onclick="promotePersonToLine(${person.id}, ${line.id})">Promote to ${line.name}</button>
-                        `).join('')}
+                    <span style="margin-left: 1rem;">
+                        <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown(${person.id})">Move</button>
+                        <div id="moveDropdown${person.id}" style="display: none; position: absolute; background: white; border: 1px solid #ff97d7; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem;">
+                            ${lineConfigs.map(line => `
+                                <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine(${person.id}, ${line.id}); toggleMoveDropdown(${person.id})">${line.name}</button>
+                            `).join('')}
+                        </div>
                     </span>
-                    <button type="button" style="margin-left: 0.5rem; color: #8f0057; font-size: 1.2rem;" onclick="removeFromGeneralWaitQueue(${person.id})">×</button>
+                    <button type="button" style="margin-left: 1rem; color: #8f0057; font-size: 1.2rem;" onclick="removeFromGeneralWaitQueue(${person.id})">×</button>
                 `;
                 list.appendChild(entry);
             });
             // Bulk promote buttons
             bulkPromote.innerHTML = lineConfigs.map(line => `
-                <button type="button" style="margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote all to ${line.name}</button>
+                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote all to ${line.name}</button>
             `).join('');
         }
 
@@ -2927,6 +2929,31 @@
             oldUpdateUIFromState(config);
             renderGeneralWaitQueue();
         };
+
+        // Toggle move dropdown for a specific person
+        function toggleMoveDropdown(personId) {
+            const dropdown = document.getElementById(`moveDropdown${personId}`);
+            if (dropdown) {
+                // Close all other dropdowns first
+                document.querySelectorAll('[id^="moveDropdown"]').forEach(d => {
+                    if (d.id !== `moveDropdown${personId}`) {
+                        d.style.display = 'none';
+                    }
+                });
+
+                // Toggle current dropdown
+                dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest('[id^="moveDropdown"]') && !event.target.closest('button[onclick*="toggleMoveDropdown"]')) {
+                document.querySelectorAll('[id^="moveDropdown"]').forEach(d => {
+                    d.style.display = 'none';
+                });
+            }
+        });
     </script>
 </body>
 
