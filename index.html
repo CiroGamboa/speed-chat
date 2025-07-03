@@ -2802,24 +2802,31 @@
             generalWaitQueue.forEach((person, idx) => {
                 const entry = document.createElement('div');
                 entry.className = 'wait-queue-entry';
+                entry.style.display = 'flex';
+                entry.style.justifyContent = 'space-between';
+                entry.style.alignItems = 'center';
                 entry.innerHTML = `
-                    <span class="person-order">${idx + 1}.</span>
-                    <span>${person.name}</span>
-                    <span style="margin-left: 1rem;">
-                        <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown(${person.id})">Move</button>
-                        <div id="moveDropdown${person.id}" style="display: none; position: absolute; background: white; border: 1px solid #ff97d7; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem;">
-                            ${lineConfigs.map(line => `
-                                <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine(${person.id}, ${line.id}); toggleMoveDropdown(${person.id})">${line.name}</button>
-                            `).join('')}
+                    <div style="display: flex; align-items: center;">
+                        <span class="person-order">${idx + 1}.</span>
+                        <span>${person.name}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <div style="position: relative;">
+                            <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown(${person.id})">Move</button>
+                            <div id="moveDropdown${person.id}" style="display: none; position: absolute; right: 0; background: white; border: 1px solid #ff97d7; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem; min-width: 100px;">
+                                ${lineConfigs.map(line => `
+                                    <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine(${person.id}, ${line.id}); toggleMoveDropdown(${person.id})">${line.name}</button>
+                                `).join('')}
+                            </div>
                         </div>
-                    </span>
-                    <button type="button" style="margin-left: 1rem; color: #8f0057; font-size: 1.2rem;" onclick="removeFromGeneralWaitQueue(${person.id})">×</button>
+                        <button type="button" style="color: #8f0057; font-size: 1.2rem; background: none; border: none; cursor: pointer;" onclick="removeFromGeneralWaitQueue(${person.id})">×</button>
+                    </div>
                 `;
                 list.appendChild(entry);
             });
             // Bulk promote buttons
             bulkPromote.innerHTML = lineConfigs.map(line => `
-                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote all to ${line.name}</button>
+                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote to ${line.name}</button>
             `).join('');
         }
 
