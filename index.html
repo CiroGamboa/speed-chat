@@ -1544,6 +1544,7 @@
                                     onchange="updateLineTime(${config.id})"
                                     required 
                                     ${currentRole !== 'admin' ? 'disabled' : ''}>
+                                <option value="" disabled selected>Select time...</option>
                                 ${generateTimeOptions().map(time =>
                         `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
                     ).join('')}
@@ -1739,6 +1740,7 @@
                                 onchange="updateLineTime(${config.id})"
                                 required 
                                 ${currentRole !== 'admin' ? 'disabled' : ''}>
+                            <option value="" disabled selected>Select time...</option>
                             ${generateTimeOptions().map(time =>
                 `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
             ).join('')}
@@ -1907,13 +1909,8 @@
 
         function parseTime(hm) {
             const [h, m] = hm.split(':').map(Number);
-            const now = new Date();
             const d = new Date();
             d.setHours(h, m, 0, 0);
-            if (d.getTime() <= now.getTime()) {
-                // If the selected time is in the past, add 1 day
-                d.setDate(d.getDate() + 1);
-            }
             return d.getTime();
         }
 
@@ -2077,6 +2074,11 @@
                             timer.classList.remove('blinking');
                         }
 
+                        status = 'inactive';
+                    } else if (now > startT + TOTAL_SESSION_TIME) {
+                        // If the scheduled time is in the past and session is over, show 00:00 and do not reschedule
+                        countElement.textContent = "00:00";
+                        timer.classList.remove('finish-window');
                         status = 'inactive';
                     } else {
                         countElement.classList.remove('starting-text');
