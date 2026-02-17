@@ -1348,7 +1348,10 @@
     <audio id="bell" src="alarm.mp3" preload="auto"></audio>
     <audio id="bell30s" src="30s_alarm.mp3" preload="auto"></audio>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
     <script>
         // Initialize variables first
         let MS5 = 5 * 60 * 1000;
@@ -1366,13 +1369,8 @@
         let alarmDuration = 0;
         let alarm30sDuration = 0;
         let audioEnabled = false;
-        let isStateUpdateInProgress = false;
         let AUTO_RESCHEDULE_MIN = 'off';
         let alarmsEnabled = localStorage.getItem('alarmsEnabled') !== 'false'; // Default to true if not set
-
-        // Global state version tracking
-        let currentStateVersion = 0;
-        let lastStateTimestamp = 0;
 
         let lineOrder = [];
 
@@ -1423,145 +1421,115 @@
             console.error('Error loading 30-second alarm sound:', e);
         });
 
-        // Connect to WebSocket server
-        const socket = io('https://speed-chat-api.fly.dev', {
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 20000,
-            forceNew: true,
-            path: '/socket.io/'
-        });
+        // ========================================
+        // Firebase Configuration and Initialization
+        // ========================================
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWcpXD5jJgq-7l8N6JRoaZu0FbZTy7jh4",
+            authDomain: "chill-speed-chat.firebaseapp.com",
+            databaseURL: "https://chill-speed-chat-default-rtdb.firebaseio.com",
+            projectId: "chill-speed-chat",
+            storageBucket: "chill-speed-chat.firebasestorage.app",
+            messagingSenderId: "161932405521",
+            appId: "1:161932405521:web:ca92e8c1f23d924006bab0"
+        };
 
-        // Add connection status logging
-        socket.on('connect', () => {
-            console.log('Connected to WebSocket server');
-            // Request initial state when connected
-            socket.emit('get_state');
-        });
+        // Initialize Firebase
+        let database = null;
+        let stateRef = null;
 
-        socket.on('disconnect', () => {
-            console.log('Disconnected from WebSocket server');
-        });
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            stateRef = database.ref('state');
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Error initializing Firebase:', error);
+            alert('Failed to initialize Firebase. Please check your configuration.');
+        }
 
-        socket.on('connect_error', (error) => {
-            console.error('WebSocket connection error:', error);
-        });
-
-        // Handle connection errors
-        socket.on('connection_error', (error) => {
-            console.error('Connection error:', error);
-            alert('Failed to connect to server. Please refresh the page.');
-        });
-
-        // Handle state conflicts
-        socket.on('state_conflict', (error) => {
-            console.warn('State conflict detected:', error);
-            alert('Your changes conflict with another user\'s changes. Please refresh the page.');
-            // Request fresh state
-            socket.emit('get_state');
-        });
-
-        // Handle state errors
-        socket.on('state_error', (error) => {
-            console.error('State error:', error);
-            alert('Error updating state. Please try again.');
-        });
-
-        // Listen for state updates from the server
-        socket.on('state_updated', (newState) => {
-            console.log('Received state update:', newState);
-
-            // Prevent recursive state updates
-            if (isStateUpdateInProgress) {
-                console.log('State update already in progress, skipping');
-                return;
-            }
-
-            // Check if this is a newer state
-            if (newState.timestamp && newState.timestamp <= lastStateTimestamp) {
-                console.log('Received older state, ignoring');
-                return;
-            }
-
-            isStateUpdateInProgress = true;
-
-            try {
-                // Ensure we have a valid state structure
+        // ========================================
+        // Firebase Real-time Listener
+        // ========================================
+        
+        // Listen for real-time state updates from Firebase
+        if (stateRef) {
+            stateRef.on('value', (snapshot) => {
+                const newState = snapshot.val();
+                
                 if (!newState || !newState.config) {
-                    console.error('Invalid state received:', newState);
+                    console.log('No state data yet or invalid state structure');
                     return;
                 }
 
-                // Update state version and timestamp
-                currentStateVersion = newState.version || 0;
-                lastStateTimestamp = newState.timestamp || 0;
+                console.log('Received state update from Firebase:', newState);
 
-                // Update global variables
-                TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
-                MS5 = parseInt(newState.config.alarmInterval) * 60 * 1000;
-                MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine) || 10;
-                BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
-                FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
-                AUTO_RESCHEDULE_MIN = newState.config.autoReschedule || 'off';
+                try {
+                    // Update global variables
+                    TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
+                    MS5 = parseInt(newState.config.alarmInterval) * 60 * 1000;
+                    MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine) || 10;
+                    BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
+                    FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
+                    AUTO_RESCHEDULE_MIN = newState.config.autoReschedule || 'off';
 
-                // Update UI elements
-                document.getElementById('sessionDuration').value = newState.config.sessionDuration;
-                document.getElementById('alarmInterval').value = newState.config.alarmInterval;
-                document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE.toString();
-                document.getElementById('blinkTime').value = BLINK_TIME_MIN.toString();
-                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN.toString();
-                document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
+                    // Update UI elements
+                    document.getElementById('sessionDuration').value = newState.config.sessionDuration;
+                    document.getElementById('alarmInterval').value = newState.config.alarmInterval;
+                    document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE.toString();
+                    document.getElementById('blinkTime').value = BLINK_TIME_MIN.toString();
+                    document.getElementById('finishWindow').value = FINISH_WINDOW_MIN.toString();
+                    document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
 
-                // Update lineConfigs and scheduledTimes
-                const newLines = newState.config.lines.map((line) => ({
-                    id: line.id, // Use the ID from the server
-                    name: line.name,
-                    time: line.time || '',
-                    people: line.people || []
-                }));
-                // If this is the first load, or if lines were added/removed, update lineOrder
-                if (
-                    lineOrder.length === 0 ||
-                    newLines.length !== lineOrder.length ||
-                    !lineOrder.every(id => newLines.some(line => line.id === id))
-                ) {
-                    lineOrder = newLines.map(line => line.id);
-                }
-                // Always reorder newLines to match lineOrder
-                lineConfigs = lineOrder.map(id => newLines.find(line => line.id === id));
+                    // Update lineConfigs and scheduledTimes
+                    const newLines = newState.config.lines.map((line) => ({
+                        id: line.id,
+                        name: line.name,
+                        time: line.time || '',
+                        people: line.people || [],
+                        waitQueue: line.waitQueue || []  // Now includes per-line wait queues!
+                    }));
 
-                // Update general wait queue
-                generalWaitQueue = newState.config.generalWaitQueue || [];
-
-                // Update scheduledTimes based on lineConfigs
-                lineConfigs.forEach(config => {
-                    if (config.time) {
-                        scheduledTimes[config.id] = parseTime(config.time);
-                    } else {
-                        delete scheduledTimes[config.id];
+                    // If this is the first load, or if lines were added/removed, update lineOrder
+                    if (
+                        lineOrder.length === 0 ||
+                        newLines.length !== lineOrder.length ||
+                        !lineOrder.every(id => newLines.some(line => line.id === id))
+                    ) {
+                        lineOrder = newLines.map(line => line.id);
                     }
-                });
+                    
+                    // Always reorder newLines to match lineOrder
+                    lineConfigs = lineOrder.map(id => newLines.find(line => line.id === id)).filter(Boolean);
 
-                // Update UI elements
-                updateUIFromState(newState.config);
-                // Update wait queue indicator
-                updateWaitQueueIndicator();
-                // Force timer update
-                updateTimers();
+                    // Update general wait queue
+                    generalWaitQueue = newState.config.generalWaitQueue || [];
 
-                console.log('State update processed successfully');
-            } catch (error) {
-                console.error('Error processing state update:', error);
-            } finally {
-                isStateUpdateInProgress = false;
-            }
-        });
+                    // Update scheduledTimes based on lineConfigs
+                    lineConfigs.forEach(config => {
+                        if (config.time) {
+                            scheduledTimes[config.id] = parseTime(config.time);
+                        } else {
+                            delete scheduledTimes[config.id];
+                        }
+                    });
 
-        // Add a function to request state update
-        function requestStateUpdate() {
-            socket.emit('get_state');
+                    // Update UI elements
+                    updateUIFromState(newState.config);
+                    // Update wait queue indicator
+                    updateWaitQueueIndicator();
+                    // Force timer update
+                    updateTimers();
+
+                    console.log('State update processed successfully');
+                } catch (error) {
+                    console.error('Error processing state update:', error);
+                }
+            }, (error) => {
+                console.error('Firebase listener error:', error);
+                alert('Lost connection to database. Please refresh the page.');
+            });
         }
 
         // Function to update UI from state
@@ -2577,12 +2545,8 @@
             updateUIBasedOnRole();
         });
 
-        // Load saved state when page loads
-        function loadSavedState() {
-            // Request initial state from server
-            socket.emit('get_state');
-        }
-        loadSavedState();
+        // Firebase automatically loads state via the real-time listener above
+        // No need for explicit state loading
 
         // Password protection
         const PASSWORD = 'speedchat2025';
@@ -2656,19 +2620,11 @@
             saveState(state);
         }
 
-        // Modify saveState function to handle real-time updates with versioning
+        // Firebase-based saveState function
         async function saveState(stateToSave = null) {
-            if (isStateUpdateInProgress) {
-                console.log('State update already in progress, skipping save');
-                return;
-            }
-
-            isStateUpdateInProgress = true;
-
             try {
                 const state = stateToSave || {
-                    // Don't send version for normal operations to prevent conflicts
-                    timestamp: Date.now() / 1000,
+                    timestamp: Date.now(),
                     config: {
                         sessionDuration: document.getElementById("sessionDuration")?.value || "30",
                         alarmInterval: document.getElementById("alarmInterval")?.value || "5",
@@ -2678,58 +2634,22 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
                             people: config.people || [],
-                            waitQueue: config.waitQueue || []
+                            waitQueue: config.waitQueue || []  // Now properly persisted
                         })),
                         generalWaitQueue: generalWaitQueue
                     }
                 };
 
-                console.log('Saving state:', state);
-                const response = await fetch("https://speed-chat-api.fly.dev/state", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(state),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    if (response.status === 409) {
-                        // State conflict - request fresh state and don't show error
-                        console.warn('State conflict detected, requesting fresh state');
-                        socket.emit('get_state');
-                        return; // Don't throw error, just return
-                    }
-                    throw new Error(errorData.message || "Failed to save state");
-                }
-
-                const result = await response.json();
-                console.log('State saved successfully:', result);
-
-                // Update local state version if server returned updated state
-                if (result.state && result.state.version) {
-                    currentStateVersion = result.state.version;
-                    lastStateTimestamp = result.state.timestamp || 0;
-                }
-
-                // Always emit state_saved event to trigger broadcast to all clients
-                // This ensures real-time sync across all connected clients
-                socket.emit('state_saved', state);
-                console.log('State saved event emitted for broadcast');
+                console.log('Saving state to Firebase:', state);
+                await stateRef.set(state);
+                console.log('State saved successfully to Firebase');
             } catch (error) {
-                console.error("Error saving state:", error);
-                if (error.message.includes('conflict')) {
-                    // Don't show alert for conflicts, just log and continue
-                    console.warn("State conflict detected, will sync with server state");
-                } else {
-                    alert("Failed to save changes. Please try again.");
-                }
-            } finally {
-                isStateUpdateInProgress = false;
+                console.error("Error saving state to Firebase:", error);
+                alert("Failed to save changes. Please check your connection and try again.");
             }
         }
 
