@@ -1482,6 +1482,10 @@
                     document.getElementById('finishWindow').value = FINISH_WINDOW_MIN.toString();
                     document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
 
+                    // #region agent log
+                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1485',message:'Firebase listener: received lines from Firebase',data:{linesFromFirebase:newState.config.lines.map(l=>({id:l.id,name:l.name}))},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                    // #endregion
+                    
                     // Update lineConfigs and scheduledTimes
                     const newLines = newState.config.lines.map((line) => ({
                         id: line.id,
@@ -1490,6 +1494,10 @@
                         people: line.people || [],
                         waitQueue: line.waitQueue || []  // Now includes per-line wait queues!
                     }));
+
+                    // #region agent log
+                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1492',message:'Firebase listener: newLines mapped',data:{newLines:newLines.map(l=>({id:l.id,name:l.name})),lineOrderBefore:lineOrder},timestamp:Date.now(),hypothesisId:'H2,H3'})}).catch(()=>{});
+                    // #endregion
 
                     // If this is the first load, or if lines were added/removed, update lineOrder
                     if (
@@ -1502,6 +1510,10 @@
                     
                     // Always reorder newLines to match lineOrder
                     lineConfigs = lineOrder.map(id => newLines.find(line => line.id === id)).filter(Boolean);
+                    
+                    // #region agent log
+                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1504',message:'Firebase listener: lineConfigs updated',data:{lineConfigs:lineConfigs.map(l=>({id:l.id,name:l.name})),lineOrderAfter:lineOrder},timestamp:Date.now(),hypothesisId:'H2,H3'})}).catch(()=>{});
+                    // #endregion
 
                     // Update general wait queue
                     generalWaitQueue = newState.config.generalWaitQueue || [];
@@ -1665,6 +1677,10 @@
         });
 
         function addLineConfig() {
+            // #region agent log
+            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1667',message:'addLineConfig: before adding line',data:{lineConfigsLength:lineConfigs.length,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+            // #endregion
+            
             // Find the highest existing line number
             const existingNumbers = lineConfigs.map(config => {
                 const match = config.name.match(/Line (\d+)/);
@@ -1680,6 +1696,11 @@
                 people: []
             };
             lineConfigs.push(lineConfig);
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1682',message:'addLineConfig: after adding line',data:{newLineId:lineId,lineConfigsLength:lineConfigs.length,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+            // #endregion
+            
             updateLineConfigs();
             updateTimers(); // Update timers immediately to show the new line
 
@@ -1695,13 +1716,20 @@
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
                     autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                     lines: lineConfigs.map(config => ({
+                        id: config.id,  // FIX: Include id field
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     })),
                     generalWaitQueue: generalWaitQueue
                 }
             };
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1705',message:'addLineConfig: state built for saving',data:{linesInState:state.config.lines.map(l=>({id:l.id,name:l.name}))},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+            // #endregion
+            
             saveState(state);
         }
 
@@ -1721,9 +1749,11 @@
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
                     autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                     lines: lineConfigs.map(config => ({
+                        id: config.id,  // FIX: Include id field
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     })),
                     generalWaitQueue: generalWaitQueue
                 }
@@ -1815,9 +1845,11 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         })),
                         generalWaitQueue: generalWaitQueue
                     }
@@ -1846,9 +1878,11 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         })),
                         generalWaitQueue: generalWaitQueue
                     }
@@ -2161,9 +2195,11 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         })),
                         generalWaitQueue: generalWaitQueue
                     }
@@ -2202,9 +2238,11 @@
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
                     autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                     lines: lineConfigs.map(config => ({
+                        id: config.id,
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     })),
                     generalWaitQueue: generalWaitQueue
                 }
@@ -2241,9 +2279,11 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
-                            people: config.people || []
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
                         })),
                         generalWaitQueue: generalWaitQueue
                     }
@@ -2297,6 +2337,7 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
                             people: config.people || [],
@@ -2336,6 +2377,7 @@
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
                     autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                     lines: lineConfigs.map(config => ({
+                        id: config.id,
                         name: config.name,
                         time: config.time || '',
                         people: config.people || [],
@@ -2375,6 +2417,7 @@
                         finishWindow: document.getElementById("finishWindow")?.value || "5",
                         autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                         lines: lineConfigs.map(config => ({
+                            id: config.id,
                             name: config.name,
                             time: config.time || '',
                             people: config.people || [],
@@ -2424,6 +2467,7 @@
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
                     autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                     lines: lineConfigs.map(config => ({
+                        id: config.id,
                         name: config.name,
                         time: config.time || '',
                         people: config.people || [],
@@ -2606,12 +2650,13 @@
                     blinkTime: BLINK_TIME_MIN.toString(),
                     finishWindow: FINISH_WINDOW_MIN.toString(),
                     autoReschedule: AUTO_RESCHEDULE_MIN,
-                    lines: lineConfigs.map(config => ({
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    })),
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        })),
                     generalWaitQueue: generalWaitQueue
                 }
             };
@@ -2623,6 +2668,10 @@
         // Firebase-based saveState function
         async function saveState(stateToSave = null) {
             try {
+                // #region agent log
+                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2624',message:'saveState: called',data:{hasPrebuiltState:!!stateToSave,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
+                // #endregion
+                
                 const state = stateToSave || {
                     timestamp: Date.now(),
                     config: {
@@ -2644,11 +2693,20 @@
                     }
                 };
 
+                // #region agent log
+                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2645',message:'saveState: about to save to Firebase',data:{linesInState:state.config.lines.map(l=>({id:l.id,name:l.name,hasUndefinedId:l.id===undefined}))},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
+                // #endregion
+
                 console.log('Saving state to Firebase:', state);
                 await stateRef.set(state);
                 console.log('State saved successfully to Firebase');
             } catch (error) {
                 console.error("Error saving state to Firebase:", error);
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2653',message:'saveState: error caught',data:{errorMessage:error.message,errorStack:error.stack},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                // #endregion
+                
                 alert("Failed to save changes. Please check your connection and try again.");
             }
         }
@@ -2835,9 +2893,11 @@
                     finishWindow: document.getElementById("finishWindow")?.value || "5",
                     autoReschedule: document.getElementById("autoReschedule")?.value || "off",
                     lines: lineConfigs.map(config => ({
+                        id: config.id,
                         name: config.name,
                         time: config.time || '',
-                        people: config.people || []
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
                     })),
                     generalWaitQueue: generalWaitQueue
                 }
