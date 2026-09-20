@@ -294,3 +294,6 @@ test-results/
 playwright-report/
 .playwright/
 node_modules/
+# re-include the test helper library (the Python `lib/` rule above otherwise hides it)
+!tests/lib/
+!tests/lib/**
