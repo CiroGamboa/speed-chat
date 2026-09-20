@@ -1,0 +1,3095 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Speed Chat Timers</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: linear-gradient(135deg, #ff97d7 0%, #fafafa 50%, #ff97d7 100%);
+            background-attachment: fixed;
+            margin: 0;
+            padding: 1rem;
+            color: #4a4949;
+            font-size: 16px;
+            min-height: 100vh;
+        }
+
+        .timer {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 1rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 2px solid #ff97d7;
+            height: auto;
+            min-height: 120px;
+        }
+
+        .timer .label {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .timer .count {
+            font-size: 3rem;
+        }
+
+        .config-section {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            display: none;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .config-section.visible {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            z-index: 4000;
+        }
+
+        .config-header {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 2000;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+            border: 2px solid #ff97d7;
+        }
+
+        .config-header:hover {
+            transform: rotate(45deg);
+            background: #ff97d7;
+        }
+
+        .config-header.open {
+            background: #ff97d7;
+        }
+
+        .gear-icon {
+            width: 24px;
+            height: 24px;
+            stroke: #8f0057;
+            stroke-width: 2;
+            pointer-events: none;
+        }
+
+        .config-content {
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 2rem 1rem 1rem;
+            box-sizing: border-box;
+            z-index: 1001;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            background: #fff;
+            display: none;
+        }
+
+        .config-content.visible {
+            display: block;
+        }
+
+        /* Mobile styles */
+        @media (max-width: 767px) {
+            .config-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 1999;
+                display: block !important;
+                background: transparent;
+            }
+
+            .config-section.visible {
+                display: flex !important;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 4000;
+            }
+
+            .config-content.visible {
+                display: block;
+            }
+
+            .config-header {
+                position: fixed;
+                top: 1rem;
+                right: 1rem;
+                width: 48px;
+                height: 48px;
+                z-index: 3000;
+                display: flex !important;
+                background: #fff;
+                border: 2px solid #ff97d7;
+                pointer-events: auto;
+            }
+
+            /* Add styles for viewer role on mobile */
+            .config-section[data-role="viewer"] {
+                display: none !important;
+            }
+
+            .config-section[data-role="viewer"] .config-header {
+                display: none !important;
+            }
+
+            .gear-icon {
+                width: 24px;
+                height: 24px;
+                stroke: #8f0057;
+                stroke-width: 2;
+                pointer-events: none;
+            }
+
+            /* Center timer block on mobile */
+            .timer {
+                width: 200px !important;
+                margin: 0 auto 1rem !important;
+            }
+
+            .timer-container {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin: 1rem auto;
+                padding: 0;
+            }
+
+            .people-panel {
+                width: 200px !important;
+                margin: 0.5rem auto 0 !important;
+            }
+
+            .wait-queue-panel {
+                width: 200px !important;
+                margin: 0.5rem auto 0 !important;
+            }
+
+            #timers-container {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 2rem;
+                margin: 0 -1rem;
+                align-items: flex-start;
+            }
+
+            body {
+                padding: 1rem 0;
+            }
+
+            /* Hide alarm toggle when config is open on mobile */
+            .config-section.visible~.alarm-toggle-container {
+                display: none !important;
+            }
+
+            /* Alternative: hide alarm toggle when config is visible */
+            .config-section.visible+.alarm-toggle-container {
+                display: none !important;
+            }
+
+            /* Most reliable: hide alarm toggle when any config section is visible */
+            .config-section.visible~* .alarm-toggle-container,
+            .config-section.visible+* .alarm-toggle-container {
+                display: none !important;
+            }
+        }
+
+        /* Desktop styles */
+        @media (min-width: 768px) {
+            .config-section {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: none;
+                display: block;
+                z-index: 1999;
+            }
+
+            .config-section.visible {
+                display: block;
+            }
+
+            .config-header {
+                position: fixed;
+                top: 1rem;
+                right: 1rem;
+                width: 48px;
+                height: 48px;
+                z-index: 2000;
+                display: flex !important;
+            }
+
+            .config-content {
+                position: fixed;
+                top: 5rem;
+                right: 1rem;
+                width: 400px;
+                height: auto;
+                max-height: calc(100vh - 6rem);
+                border-radius: 8px;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+                padding: 1.5rem;
+                background: #fff;
+                z-index: 1999;
+            }
+
+            .close-config {
+                display: none;
+            }
+
+            /* Adjust form elements for wider panel */
+            .global-settings {
+                margin-bottom: 1.5rem;
+                padding: 1.5rem;
+            }
+
+            .line-config {
+                padding: 1rem;
+            }
+
+            .line-fields {
+                gap: 1rem;
+            }
+
+            .people-management {
+                padding: 1rem;
+            }
+        }
+
+        .timer-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 1rem;
+        }
+
+        .people-panel {
+            width: 200px;
+            margin-top: 0.5rem;
+            padding: 0.75rem;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 2px solid #ff97d7;
+            min-height: 60px;
+        }
+
+        .people-panel .title {
+            font-size: 0.9rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .people-panel .seats-info {
+            font-size: 0.8rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+        }
+
+        .people-panel .people-list {
+            font-size: 0.9rem;
+            color: #4a4949;
+            line-height: 1.4;
+        }
+
+        .people-panel .empty-message {
+            font-size: 0.9rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        .timer.active {
+            border: 2px solid #8f0057;
+        }
+
+        .timer.inactive {
+            opacity: 0.6;
+        }
+
+        .timer.finish-window {
+            background: #8f0057 !important;
+            color: #fff !important;
+            border-color: #fff !important;
+        }
+
+        .timer.finish-window .label {
+            color: #ff97d7 !important;
+        }
+
+        .timer .count.starting-text {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+            line-height: 1.2;
+            white-space: normal;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: auto;
+            min-height: 2.5rem;
+        }
+
+        .timer .count.starting-text .scheduled-time {
+            font-size: 1.1rem;
+            color: #666;
+            margin-top: 0.2rem;
+        }
+
+        .timer .count.lounge-text {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .global-settings {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .global-settings label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #8f0057;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tooltip-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ff97d7;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: help;
+            position: relative;
+        }
+
+        .tooltip-icon:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(100% + 5px);
+            padding: 8px 12px;
+            background: #8f0057;
+            color: white;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: normal;
+            white-space: nowrap;
+            z-index: 2002;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .tooltip-icon:hover::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(100% - 5px);
+            border-width: 5px;
+            border-style: solid;
+            border-color: #8f0057 transparent transparent transparent;
+        }
+
+        .global-settings select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            color: #4a4949;
+        }
+
+        .line-config {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 4px;
+            align-items: center;
+            border: 1px solid #ff97d7;
+        }
+
+        .line-fields {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .line-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            width: 100%;
+        }
+
+        .line-buttons button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        .line-buttons button:hover {
+            background: #ff97d7;
+            color: #fff;
+        }
+
+        .line-buttons button:last-child {
+            background: #4a4949;
+        }
+
+        .line-buttons button:last-child:hover {
+            background: #666;
+        }
+
+        .line-config input[type="text"] {
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            width: 100%;
+            color: #4a4949;
+        }
+
+        .line-config select {
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            min-width: 80px;
+            color: #4a4949;
+        }
+
+        .add-line-btn {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+
+        .start-btn {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .start-btn:hover,
+        .add-line-btn:hover {
+            background: #ff97d7;
+        }
+
+        .reset-btn {
+            background: #4a4949;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .reset-btn:hover {
+            background: #666;
+        }
+
+        .line-config button:hover {
+            background: #ff97d7;
+        }
+
+        h1 {
+            color: #8f0057;
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+        }
+
+        .logo-container {
+            width: 180px;
+            height: 180px;
+            margin: 0 auto 2rem;
+            background: #ff97d7;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            border: 2px solid #8f0057;
+        }
+
+        .logo {
+            width: 70%;
+            height: 70%;
+            object-fit: contain;
+        }
+
+        .notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(143, 0, 87, 0.95);
+            color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            z-index: 2000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .notification-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1999;
+            display: none;
+        }
+
+        @keyframes fadeInOut {
+            0% {
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        #timers-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem;
+            margin: 0 -1rem;
+            align-items: flex-start;
+        }
+
+        @media (min-width: 1200px) {
+            .timer {
+                width: 200px;
+            }
+        }
+
+        #scheduleForm {
+            position: relative;
+            padding-bottom: 120px;
+            /* Space for the sticky buttons */
+        }
+
+        .form-buttons {
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 1rem 0;
+            margin-top: 1rem;
+            border-top: 2px solid #ff97d7;
+            z-index: 1002;
+        }
+
+        .start-btn {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .reset-btn {
+            background: #4a4949;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .line-config {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 4px;
+            align-items: center;
+            border: 1px solid #ff97d7;
+        }
+
+        .people-management {
+            width: 100%;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: #fafafa;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .people-count {
+            font-weight: bold;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .people-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .person-entry {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: #fff;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .person-entry button {
+            background: none;
+            border: none;
+            color: #8f0057;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 0.25rem;
+            line-height: 1;
+        }
+
+        .person-entry button:hover {
+            color: #ff97d7;
+        }
+
+        .person-order {
+            font-weight: bold;
+            color: #8f0057;
+            margin-right: 0.25rem;
+            font-size: 0.9rem;
+            min-width: 1.2rem;
+            display: inline-block;
+            text-align: left;
+        }
+
+        .wait-queue-entry .person-order {
+            color: #0066cc;
+        }
+
+        .add-person {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .add-person input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+        }
+
+        .add-person button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .add-person button:hover {
+            background: #ff97d7;
+        }
+
+        .timer .people {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #4a4949;
+            max-height: 3em;
+            overflow-y: auto;
+        }
+
+        .timer .people-count {
+            font-size: 0.8rem;
+            color: #8f0057;
+            margin-top: 0.25rem;
+        }
+
+        .timer.blinking {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% {
+                background: #fff;
+                color: #4a4949;
+            }
+
+            50% {
+                background: #8f0057;
+                color: #fff;
+            }
+
+            100% {
+                background: #fff;
+                color: #4a4949;
+            }
+        }
+
+        .timer.blinking .label {
+            color: inherit;
+        }
+
+        .timer.blinking .count {
+            color: inherit;
+        }
+
+        .role-selector {
+            background: #fff;
+            padding: 0;
+            border-radius: 4px;
+            border: none;
+            margin-bottom: 1.5rem;
+            width: 100%;
+        }
+
+        .role-selector select {
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            color: #4a4949;
+            width: 100%;
+        }
+
+        .role-selector label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #8f0057;
+        }
+
+        /* Password Modal Styles */
+        .password-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .password-modal.visible {
+            display: flex;
+        }
+
+        .password-modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            border: 2px solid #ff97d7;
+        }
+
+        .password-modal h2 {
+            color: #8f0057;
+            margin-bottom: 1rem;
+        }
+
+        .password-modal input {
+            width: 100%;
+            padding: 0.75rem;
+            margin: 1rem 0;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .password-modal button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            width: 100%;
+        }
+
+        .password-modal button:hover {
+            background: #ff97d7;
+        }
+
+        .password-error {
+            color: #ff0000;
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .alarm-toggle-container {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            border: 2px solid #ff97d7;
+            z-index: 3000;
+            pointer-events: auto;
+        }
+
+        .alarm-toggle-label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #8f0057;
+            margin: 0;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 24px;
+            pointer-events: auto;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+            z-index: 3001;
+        }
+
+        .toggle-switch label {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+            pointer-events: auto;
+        }
+
+        .toggle-switch label:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked+label {
+            background-color: #8f0057;
+        }
+
+        .toggle-switch input:checked+label:before {
+            transform: translateX(16px);
+        }
+
+        .play-alarm-button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            transition: background 0.2s;
+            pointer-events: auto;
+        }
+
+        .play-alarm-button:hover {
+            background: #ff97d7;
+        }
+
+        .play-alarm-button:active {
+            transform: scale(0.95);
+        }
+
+        /* Wait Queue Styles */
+        .wait-queue-management {
+            width: 100%;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: #fafafa;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .wait-queue-title {
+            font-weight: bold;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .wait-queue-count {
+            font-size: 0.8rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+        }
+
+        .wait-queue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .wait-queue-entry {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #fff;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #ff97d7;
+        }
+
+        .wait-queue-entry button {
+            background: none;
+            border: none;
+            color: #8f0057;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 0.25rem;
+            line-height: 1;
+        }
+
+        .wait-queue-entry button:hover {
+            color: #ff97d7;
+        }
+
+        .add-wait-queue {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .add-wait-queue input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ff97d7;
+            border-radius: 4px;
+        }
+
+        .add-wait-queue button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .add-wait-queue button:hover {
+            background: #ff97d7;
+        }
+
+        .promote-button {
+            background: #8f0057;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+
+        .promote-button:hover {
+            background: #ff97d7;
+        }
+
+        .promote-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .wait-queue-panel {
+            width: 200px;
+            margin-top: 0.5rem;
+            padding: 0.75rem;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border: 2px solid #ff97d7;
+            min-height: 60px;
+        }
+
+        .wait-queue-panel .title {
+            font-size: 0.9rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .wait-queue-panel .queue-info {
+            font-size: 0.8rem;
+            color: #8f0057;
+            margin-bottom: 0.5rem;
+        }
+
+        .wait-queue-panel .queue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-size: 0.9rem;
+            color: #4a4949;
+            line-height: 1.4;
+        }
+
+        .wait-queue-panel .empty-message {
+            font-size: 0.9rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        .wait-queue-entry .person-order {
+            color: #8f0057;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Password Modal -->
+    <div class="password-modal" id="passwordModal">
+        <div class="password-modal-content">
+            <h2>Enter Password</h2>
+            <input type="password" id="passwordInput" placeholder="Enter password">
+            <div class="password-error" id="passwordError">Incorrect password</div>
+            <button onclick="checkPassword()">Submit</button>
+        </div>
+    </div>
+
+    <div class="logo-container">
+        <img src="logo.png" alt="Speed Chat Logo" class="logo">
+    </div>
+    <h1>Welcome to Speed Chat!</h1>
+
+    <div style="text-align: center; width: 100%;">
+        <div id="waitQueueIndicator"
+            style="display: inline-block; padding: 0.5rem 1rem; background: #fff; border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); border: 1px solid #ff97d7; font-size: 0.9rem; color: #8f0057; margin: 1rem auto;">
+            <span style="font-weight: bold;">Wait Queue:</span> <span id="waitQueueCount">0</span> people
+        </div>
+    </div>
+
+    <div class="alarm-toggle-container">
+        <label for="alarmToggle" class="alarm-toggle-label">Alarm</label>
+        <div class="toggle-switch">
+            <input type="checkbox" id="alarmToggle" checked>
+            <label for="alarmToggle"></label>
+        </div>
+        <button id="playAlarmButton" class="play-alarm-button" onclick="playAlarmManually()" title="Play alarm sound">▶</button>
+    </div>
+
+    <div id="currentTimeDisplay"
+        style="position: fixed; top: 4rem; left: 1rem; background: #fff; padding: 0.5rem; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); border: 2px solid #ff97d7; font-size: 0.9rem; color: #8f0057; font-weight: bold; z-index: 3000;">
+        <span id="currentTime">--:--</span>
+    </div>
+
+    <div class="notification-overlay" id="notificationOverlay"></div>
+    <div class="notification" id="changeSeatNotification">
+        Change, go to the next table
+    </div>
+
+    <div class="config-section" id="configSection">
+        <div class="config-header" onclick="toggleConfig()">
+            <svg class="gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                <path
+                    d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+        </div>
+        <div class="config-content" id="configContent">
+            <div class="global-settings">
+                <label>
+                    Session Duration
+                    <span class="tooltip-icon" data-tooltip="How long each speed chat session will last">?</span>
+                </label>
+                <select id="sessionDuration">
+                    <option value="1">1 minute</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="20">20 minutes</option>
+                    <option value="25">25 minutes</option>
+                    <option value="30" selected>30 minutes</option>
+                    <option value="35">35 minutes</option>
+                    <option value="40">40 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="50">50 minutes</option>
+                    <option value="55">55 minutes</option>
+                    <option value="60">60 minutes</option>
+                </select>
+
+                <label>
+                    Alarm Interval
+                    <span class="tooltip-icon"
+                        data-tooltip="How often the alarm will sound to remind people to change seats">?</span>
+                </label>
+                <select id="alarmInterval">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="3">3 minutes</option>
+                    <option value="4">4 minutes</option>
+                    <option value="5" selected>5 minutes</option>
+                    <option value="6">6 minutes</option>
+                    <option value="7">7 minutes</option>
+                    <option value="8">8 minutes</option>
+                    <option value="9">9 minutes</option>
+                    <option value="10">10 minutes</option>
+                </select>
+
+                <label>
+                    Finish Window
+                    <span class="tooltip-icon"
+                        data-tooltip="How many minutes before the end when people should start moving to the lobby">?</span>
+                </label>
+                <select id="finishWindow">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="3">3 minutes</option>
+                    <option value="4">4 minutes</option>
+                    <option value="5" selected>5 minutes</option>
+                    <option value="6">6 minutes</option>
+                    <option value="7">7 minutes</option>
+                    <option value="8">8 minutes</option>
+                    <option value="9">9 minutes</option>
+                    <option value="10">10 minutes</option>
+                </select>
+
+                <label>
+                    Maximum People per Line
+                    <span class="tooltip-icon"
+                        data-tooltip="Maximum number of people that can be registered in each line">?</span>
+                </label>
+                <select id="maxPeople">
+                    <option value="1">1 person</option>
+                    <option value="2">2 people</option>
+                    <option value="3">3 people</option>
+                    <option value="4">4 people</option>
+                    <option value="5">5 people</option>
+                    <option value="6">6 people</option>
+                    <option value="7">7 people</option>
+                    <option value="8">8 people</option>
+                    <option value="9">9 people</option>
+                    <option value="10">10 people</option>
+                    <option value="11">11 people</option>
+                    <option value="12">12 people</option>
+                    <option value="13">13 people</option>
+                    <option value="14">14 people</option>
+                    <option value="15">15 people</option>
+                    <option value="16">16 people</option>
+                    <option value="17">17 people</option>
+                    <option value="18">18 people</option>
+                    <option value="19">19 people</option>
+                    <option value="20">20 people</option>
+                </select>
+
+                <label>
+                    Blink Before Start
+                    <span class="tooltip-icon"
+                        data-tooltip="How many minutes before start time the timer will start blinking">?</span>
+                </label>
+                <select id="blinkTime">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="3">3 minutes</option>
+                    <option value="4">4 minutes</option>
+                    <option value="5" selected>5 minutes</option>
+                    <option value="6">6 minutes</option>
+                    <option value="7">7 minutes</option>
+                    <option value="8">8 minutes</option>
+                    <option value="9">9 minutes</option>
+                    <option value="10">10 minutes</option>
+                </select>
+
+                <label>
+                    Auto Reschedule
+                    <span class="tooltip-icon"
+                        data-tooltip="Automatically reschedule the timer after it ends. If off, timer must be manually restarted.">?</span>
+                </label>
+                <select id="autoReschedule">
+                    <option value="off" selected>Off</option>
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="20">20 minutes</option>
+                    <option value="25">25 minutes</option>
+                    <option value="30">30 minutes</option>
+                </select>
+            </div>
+
+            <button class="add-line-btn" onclick="addLineConfig()">Add Line</button>
+
+            <div id="generalWaitQueueSection" class="wait-queue-management">
+                <div class="wait-queue-title">
+                    <span>General Wait Queue</span>
+                    <button type="button" id="clearGeneralWaitQueueBtn"
+                        style="background: none; border: none; color: #0066cc; cursor: pointer; font-size: 0.8rem;">Clear
+                        All</button>
+                </div>
+                <div class="wait-queue-count">
+                    People: <span id="generalWaitQueueCount">0</span> (no limit)
+                </div>
+                <div class="next-line-info" id="nextLineInfo"
+                    style="font-size: 0.8rem; color: #8f0057; margin-bottom: 0.5rem; font-style: italic;">
+                    <!-- Next line information will be displayed here -->
+                </div>
+                <div class="wait-queue-list" id="generalWaitQueueList">
+                    <!-- People will be rendered here -->
+                </div>
+                <div class="add-wait-queue">
+                    <input type="text" id="newGeneralWaitQueuePerson" placeholder="Add person to wait queue">
+                    <button type="button" id="addGeneralWaitQueuePersonBtn">Add</button>
+                </div>
+                <div id="bulkPromoteButtons" style="margin-top: 0.5rem;"></div>
+            </div>
+
+            <form id="scheduleForm">
+                <div id="linesContainer">
+                    <!-- Line configurations will be added here -->
+                </div>
+                <div class="form-buttons">
+                    <button type="button" class="reset-btn" onclick="resetApplication()">Reset All Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="timers-container">
+        <!-- Timers will be added here -->
+    </div>
+
+    <audio id="bell" src="alarm.mp3" preload="auto"></audio>
+    <audio id="bell30s" src="30s_alarm.mp3" preload="auto"></audio>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <script>
+        // Initialize variables first
+        let MS5 = 5 * 60 * 1000;
+        const bell = document.getElementById('bell');
+        const bell30s = document.getElementById('bell30s');
+        let scheduledTimes = {};
+        let lineConfigs = [];
+        let generalWaitQueue = [];
+        let TOTAL_SESSION_TIME = 30 * 60 * 1000;
+        let FINISH_WINDOW_MIN = 5;
+        let MAX_PEOPLE_PER_LINE = 10;
+        let BLINK_TIME_MIN = 5;
+        let currentRole = getRoleFromUrl(); // Initialize role from URL
+        let isUpdatingUI = false;
+        let alarmDuration = 0;
+        let alarm30sDuration = 0;
+        let audioEnabled = false;
+        let AUTO_RESCHEDULE_MIN = 'off';
+        let alarmsEnabled = localStorage.getItem('alarmsEnabled') !== 'false'; // Default to true if not set
+
+        let lineOrder = [];
+
+        // Enable audio on first user interaction
+        document.addEventListener('click', function enableAudio() {
+            if (!audioEnabled) {
+                audioEnabled = true;
+                // Try to play and immediately pause to enable audio for both alarms
+                Promise.all([
+                    bell.play().then(() => {
+                        bell.pause();
+                        bell.currentTime = 0;
+                        console.log('Main alarm audio enabled successfully');
+                    }).catch(error => {
+                        console.error('Error enabling main alarm audio:', error);
+                    }),
+                    bell30s.play().then(() => {
+                        bell30s.pause();
+                        bell30s.currentTime = 0;
+                        console.log('30-second alarm audio enabled successfully');
+                    }).catch(error => {
+                        console.error('Error enabling 30-second alarm audio:', error);
+                    })
+                ]).then(() => {
+                    console.log('All audio enabled successfully');
+                });
+                // Remove the event listener after first interaction
+                document.removeEventListener('click', enableAudio);
+            }
+        }, { once: true });
+
+        // Get the duration of the alarm sounds and ensure they're loaded
+        bell.addEventListener('loadeddata', function () {
+            console.log('Main alarm sound loaded successfully');
+            alarmDuration = bell.duration * 1000; // Convert to milliseconds
+        });
+
+        bell.addEventListener('error', function (e) {
+            console.error('Error loading main alarm sound:', e);
+        });
+
+        bell30s.addEventListener('loadeddata', function () {
+            console.log('30-second alarm sound loaded successfully');
+            alarm30sDuration = bell30s.duration * 1000; // Convert to milliseconds
+        });
+
+        bell30s.addEventListener('error', function (e) {
+            console.error('Error loading 30-second alarm sound:', e);
+        });
+
+        // ========================================
+        // Firebase Configuration and Initialization
+        // ========================================
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWcpXD5jJgq-7l8N6JRoaZu0FbZTy7jh4",
+            authDomain: "chill-speed-chat.firebaseapp.com",
+            databaseURL: "https://chill-speed-chat-default-rtdb.firebaseio.com",
+            projectId: "chill-speed-chat",
+            storageBucket: "chill-speed-chat.firebasestorage.app",
+            messagingSenderId: "161932405521",
+            appId: "1:161932405521:web:ca92e8c1f23d924006bab0"
+        };
+
+        // Initialize Firebase
+        let database = null;
+        let stateRef = null;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            stateRef = database.ref('state');
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Error initializing Firebase:', error);
+            alert('Failed to initialize Firebase. Please check your configuration.');
+        }
+
+        // ========================================
+        // Firebase Real-time Listener
+        // ========================================
+        
+        // Listen for real-time state updates from Firebase
+        if (stateRef) {
+            stateRef.on('value', (snapshot) => {
+                const newState = snapshot.val();
+                
+                if (!newState || !newState.config) {
+                    console.log('No state data yet or invalid state structure');
+                    return;
+                }
+
+                console.log('Received state update from Firebase:', newState);
+
+                try {
+                    // Update global variables
+                    TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
+                    MS5 = parseInt(newState.config.alarmInterval) * 60 * 1000;
+                    MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine) || 10;
+                    BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
+                    FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
+                    AUTO_RESCHEDULE_MIN = newState.config.autoReschedule || 'off';
+
+                    // Update UI elements
+                    document.getElementById('sessionDuration').value = newState.config.sessionDuration;
+                    document.getElementById('alarmInterval').value = newState.config.alarmInterval;
+                    document.getElementById('maxPeople').value = MAX_PEOPLE_PER_LINE.toString();
+                    document.getElementById('blinkTime').value = BLINK_TIME_MIN.toString();
+                    document.getElementById('finishWindow').value = FINISH_WINDOW_MIN.toString();
+                    document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
+
+                    // #region agent log
+                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1485',message:'Firebase listener: received lines from Firebase',data:{linesFromFirebase:newState.config.lines.map(l=>({id:l.id,name:l.name}))},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                    // #endregion
+                    
+                    // Update lineConfigs and scheduledTimes
+                    const newLines = newState.config.lines.map((line) => ({
+                        id: line.id,
+                        name: line.name,
+                        time: line.time || '',
+                        people: line.people || [],
+                        waitQueue: line.waitQueue || []  // Now includes per-line wait queues!
+                    }));
+
+                    // #region agent log
+                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1492',message:'Firebase listener: newLines mapped',data:{newLines:newLines.map(l=>({id:l.id,name:l.name})),lineOrderBefore:lineOrder},timestamp:Date.now(),hypothesisId:'H2,H3'})}).catch(()=>{});
+                    // #endregion
+
+                    // If this is the first load, or if lines were added/removed, update lineOrder
+                    if (
+                        lineOrder.length === 0 ||
+                        newLines.length !== lineOrder.length ||
+                        !lineOrder.every(id => newLines.some(line => line.id === id))
+                    ) {
+                        lineOrder = newLines.map(line => line.id);
+                    }
+                    
+                    // Always reorder newLines to match lineOrder
+                    lineConfigs = lineOrder.map(id => newLines.find(line => line.id === id)).filter(Boolean);
+                    
+                    // #region agent log
+                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1504',message:'Firebase listener: lineConfigs updated',data:{lineConfigs:lineConfigs.map(l=>({id:l.id,name:l.name})),lineOrderAfter:lineOrder},timestamp:Date.now(),hypothesisId:'H2,H3'})}).catch(()=>{});
+                    // #endregion
+
+                    // Update general wait queue
+                    generalWaitQueue = newState.config.generalWaitQueue || [];
+
+                    // Update scheduledTimes based on lineConfigs
+                    lineConfigs.forEach(config => {
+                        if (config.time) {
+                            scheduledTimes[config.id] = parseTime(config.time);
+                        } else {
+                            delete scheduledTimes[config.id];
+                        }
+                    });
+
+                    // Update UI elements
+                    updateUIFromState(newState.config);
+                    // Update wait queue indicator
+                    updateWaitQueueIndicator();
+                    // Force timer update
+                    updateTimers();
+
+                    console.log('State update processed successfully');
+                } catch (error) {
+                    console.error('Error processing state update:', error);
+                }
+            }, (error) => {
+                console.error('Firebase listener error:', error);
+                alert('Lost connection to database. Please refresh the page.');
+            });
+        }
+
+        // Function to update UI from state
+        function updateUIFromState(config) {
+            console.log('Updating UI from state:', config);
+
+            // Update form elements
+            const elements = {
+                "sessionDuration": config.sessionDuration,
+                "alarmInterval": config.alarmInterval,
+                "maxPeoplePerLine": config.maxPeoplePerLine,
+                "blinkBeforeStart": config.blinkBeforeStart,
+                "blinkTime": config.blinkTime,
+                "finishWindow": config.finishWindow,
+                "autoReschedule": config.autoReschedule || 'off'
+            };
+
+            Object.entries(elements).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (typeof value === 'boolean') {
+                        element.checked = value;
+                    } else {
+                        element.value = value;
+                    }
+                }
+            });
+
+            // Update lines
+            const linesContainer = document.getElementById("linesContainer");
+            if (linesContainer) {
+                linesContainer.innerHTML = "";
+                lineConfigs.forEach(config => {
+                    const lineDiv = document.createElement("div");
+                    lineDiv.className = "line-config";
+                    lineDiv.innerHTML = `
+                        <div class="line-fields">
+                            <input type="text" 
+                                   class="line-name"
+                                   value="${config.name}" 
+                                   onchange="updateLineName(${config.id}, this.value)"
+                                   placeholder="Line name"
+                                   ${currentRole !== 'admin' ? 'disabled' : ''}>
+                            <select id="time${config.id}" 
+                                    onchange="updateLineTime(${config.id})"
+                                    required 
+                                    ${currentRole !== 'admin' ? 'disabled' : ''}>
+                                <option value="" disabled selected>Select time...</option>
+                                ${generateTimeOptions().map(time =>
+                        `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
+                    ).join('')}
+                            </select>
+                        </div>
+                        ${config.time ? `
+                            <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: #f0f0f0; border-radius: 4px; font-size: 0.9rem; color: #8f0057; font-weight: bold;">
+                                Start time: ${config.time}
+                            </div>
+                        ` : ''}
+                        <div class="people-management">
+                            <div class="people-count">
+                                <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
+                                ${currentRole !== 'viewer' ? `
+                                    <button type="button" onclick="clearPeople(${config.id})" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                ` : ''}
+                            </div>
+                            <div class="people-list">
+                                ${config.people && config.people.length > 0
+                            ? config.people.map((person, index) => `
+                                    <div class="person-entry">
+                                        <span class="person-order">${index + 1}.</span>
+                                        <span>${person.name}</span>
+                                        ${currentRole !== 'viewer' ? `
+                                            <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                        ` : ''}
+                                    </div>
+                                `).join('')
+                            : '<div class="empty-message">No one here yet</div>'
+                        }
+                            </div>
+                            ${currentRole !== 'viewer' ? `
+                                <div class="add-person">
+                                    <input type="text" 
+                                           id="newPerson${config.id}" 
+                                           placeholder="Add person's name"
+                                           onkeypress="handlePersonInput(event, ${config.id})">
+                                    <button type="button" onclick="addPerson(${config.id})">Add</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                        ${currentRole === 'admin' ? `
+                            <div class="line-buttons">
+                                <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
+                            </div>
+                        ` : ''}
+                    `;
+                    linesContainer.appendChild(lineDiv);
+                });
+            }
+
+            // Render general wait queue
+            renderGeneralWaitQueue();
+
+            // Update next line information
+            updateNextLineInfo();
+        }
+
+        function toggleConfig() {
+            const section = document.getElementById('configSection');
+            const content = document.getElementById('configContent');
+            const header = document.querySelector('.config-header');
+            const alarmToggle = document.querySelector('.alarm-toggle-container');
+
+            section.classList.toggle('visible');
+            content.classList.toggle('visible');
+            header.classList.toggle('open');
+
+            // Hide/show alarm toggle on mobile when config is opened/closed
+            if (window.innerWidth <= 767) {
+                if (section.classList.contains('visible')) {
+                    alarmToggle.style.display = 'none';
+                } else {
+                    alarmToggle.style.display = 'flex';
+                }
+            }
+        }
+
+        // Initialize config section state
+        document.addEventListener('DOMContentLoaded', function () {
+            const section = document.getElementById('configSection');
+            const content = document.getElementById('configContent');
+            section.classList.remove('visible');
+            content.classList.remove('visible');
+        });
+
+        function addLineConfig() {
+            // #region agent log
+            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1667',message:'addLineConfig: before adding line',data:{lineConfigsLength:lineConfigs.length,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+            // #endregion
+            
+            // Find the highest existing line number
+            const existingNumbers = lineConfigs.map(config => {
+                const match = config.name.match(/Line (\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            });
+            const nextNumber = Math.max(0, ...existingNumbers) + 1;
+
+            const lineId = lineConfigs.length + 1;
+            const lineConfig = {
+                id: lineId,
+                name: `Line ${nextNumber}`,
+                time: '',
+                people: []
+            };
+            lineConfigs.push(lineConfig);
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1682',message:'addLineConfig: after adding line',data:{newLineId:lineId,lineConfigsLength:lineConfigs.length,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+            // #endregion
+            
+            updateLineConfigs();
+            updateTimers(); // Update timers immediately to show the new line
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        id: config.id,  // FIX: Include id field
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    })),
+                    generalWaitQueue: generalWaitQueue
+                }
+            };
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1705',message:'addLineConfig: state built for saving',data:{linesInState:state.config.lines.map(l=>({id:l.id,name:l.name}))},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+            // #endregion
+            
+            saveState(state);
+        }
+
+        function removeLineConfig(lineId) {
+            lineConfigs = lineConfigs.filter(config => config.id !== lineId);
+            updateLineConfigs();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        id: config.id,  // FIX: Include id field
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    })),
+                    generalWaitQueue: generalWaitQueue
+                }
+            };
+            saveState(state);
+        }
+
+        function updateLineConfigs() {
+            const container = document.getElementById('linesContainer');
+            container.innerHTML = lineConfigs.map(config => `
+                <div class="line-config">
+                    <div class="line-fields">
+                        <input type="text" 
+                               class="line-name"
+                               value="${config.name}" 
+                               onchange="updateLineName(${config.id}, this.value)"
+                               placeholder="Line name"
+                               ${currentRole !== 'admin' ? 'disabled' : ''}>
+                        <select id="time${config.id}" 
+                                onchange="updateLineTime(${config.id})"
+                                required 
+                                ${currentRole !== 'admin' ? 'disabled' : ''}>
+                            <option value="" disabled selected>Select time...</option>
+                            ${generateTimeOptions().map(time =>
+                `<option value="${time}" ${config.time === time ? 'selected' : ''}>${time}</option>`
+            ).join('')}
+                        </select>
+                    </div>
+                    ${config.time ? `
+                        <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: #f0f0f0; border-radius: 4px; font-size: 0.9rem; color: #8f0057; font-weight: bold;">
+                            Start time: ${config.time}
+                        </div>
+                    ` : ''}
+                    <div class="people-management">
+                        <div class="people-count">
+                            <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
+                            ${currentRole !== 'viewer' ? `
+                                <button type="button" onclick="clearPeople(${config.id})" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                            ` : ''}
+                        </div>
+                        <div class="people-list">
+                            ${config.people && config.people.length > 0
+                    ? config.people.map((person, index) => `
+                                    <div class="person-entry">
+                                        <span class="person-order">${index + 1}.</span>
+                                        <span>${person.name}</span>
+                                        ${currentRole !== 'viewer' ? `
+                                            <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                        ` : ''}
+                                    </div>
+                                `).join('')
+                    : '<div class="empty-message">No one here yet</div>'
+                }
+                        </div>
+                        ${currentRole !== 'viewer' ? `
+                            <div class="add-person">
+                                <input type="text" 
+                                       id="newPerson${config.id}" 
+                                       placeholder="Add person's name"
+                                       onkeypress="handlePersonInput(event, ${config.id})">
+                                <button type="button" onclick="addPerson(${config.id})">Add</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    ${currentRole === 'admin' ? `
+                        <div class="line-buttons">
+                            <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function updateLineName(lineId, name) {
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (config) {
+                config.name = name || `Line ${lineId}`; // Ensure there's always a name
+                updateTimers(); // Update timers when name changes
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        })),
+                        generalWaitQueue: generalWaitQueue
+                    }
+                };
+                saveState(state);
+            }
+        }
+
+        function updateLineTime(lineId) {
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (config) {
+                const timeSelect = document.getElementById(`time${lineId}`);
+                scheduledTimes[lineId] = parseTime(timeSelect.value);
+                config.time = timeSelect.value;
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        })),
+                        generalWaitQueue: generalWaitQueue
+                    }
+                };
+                saveState(state);
+            }
+        }
+
+        function pad(n) { return n.toString().padStart(2, '0'); }
+
+        function formatTime(date) {
+            return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        function generateTimeOptions() {
+            const now = new Date();
+            const startTime = new Date(now);
+            startTime.setMinutes(Math.ceil(startTime.getMinutes() / 5) * 5);
+            startTime.setSeconds(0);
+            startTime.setMilliseconds(0);
+
+            const endTime = new Date(now.getTime() + 2 * 60 * 60000);
+            const options = [];
+
+            while (startTime <= endTime) {
+                options.push(formatTime(startTime));
+                startTime.setMinutes(startTime.getMinutes() + 5);
+            }
+
+            return options;
+        }
+
+        function parseTime(hm) {
+            const [h, m] = hm.split(':').map(Number);
+            const d = new Date();
+            d.setHours(h, m, 0, 0);
+            return d.getTime();
+        }
+
+        document.getElementById('scheduleForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            updateTimingSettings();
+            scheduledTimes = {};
+
+            lineConfigs.forEach(config => {
+                const timeSelect = document.getElementById(`time${config.id}`);
+                scheduledTimes[config.id] = parseTime(timeSelect.value);
+                config.time = timeSelect.value;
+            });
+
+            updateTimers();
+            toggleConfig();
+            saveState();
+        });
+
+        function showChangeSeatNotification() {
+            // Check if alarms are enabled from the toggle
+            const alarmToggle = document.getElementById('alarmToggle');
+            if (!alarmToggle.checked) return;
+
+            const notification = document.getElementById('changeSeatNotification');
+            const overlay = document.getElementById('notificationOverlay');
+
+            // Show the notification and overlay first
+            notification.style.display = 'block';
+            overlay.style.display = 'block';
+
+            // Only try to play sound if audio is enabled
+            if (audioEnabled) {
+                // Reset and play the alarm sound
+                bell.currentTime = 0;
+
+                // Try to play the sound
+                const playPromise = bell.play();
+
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log('Alarm sound started playing');
+                        // When the alarm finishes playing, hide the notification
+                        bell.addEventListener('ended', () => {
+                            console.log('Alarm sound finished playing');
+                            notification.style.display = 'none';
+                            overlay.style.display = 'none';
+                        }, { once: true });
+                    }).catch(error => {
+                        console.error('Error playing alarm:', error);
+                        // If there's an error playing the sound, hide the notification after 3 seconds
+                        setTimeout(() => {
+                            notification.style.display = 'none';
+                            overlay.style.display = 'none';
+                        }, 3000);
+                    });
+                }
+            } else {
+                // If audio is not enabled, just show the notification for 3 seconds
+                console.log('Audio not enabled yet, showing notification without sound');
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                    overlay.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        function showThirtySecondAlarm() {
+            // Check if 30-second alarms are enabled
+            if (!alarmsEnabled) return;
+
+            // Only try to play sound if audio is enabled
+            if (audioEnabled) {
+                // Reset and play the 30-second alarm sound
+                bell30s.currentTime = 0;
+
+                // Try to play the sound
+                const playPromise = bell30s.play();
+
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log('30-second alarm sound started playing');
+                    }).catch(error => {
+                        console.error('Error playing 30-second alarm:', error);
+                    });
+                }
+            } else {
+                console.log('Audio not enabled yet, cannot play 30-second alarm');
+            }
+        }
+
+        function playAlarmManually() {
+            // Manually trigger the alarm notification and sound
+            // This works regardless of the alarm toggle state (for testing purposes)
+            console.log('Manual alarm triggered');
+            showChangeSeatNotification();
+        }
+
+        function updateTimers() {
+            // Create timer containers without individual wait queues
+            const timerHTML = lineConfigs.map((config, index) => `
+                <div class="timer-container" data-line="${config.id}" style="order: ${index};">
+                    <div class="timer" data-line="${config.id}">
+                        <div class="label">${config.name}</div>
+                        <div class="count">00:00</div>
+                    </div>
+                    <div class="people-panel">
+                        <div class="title">People for next Line</div>
+                        <div class="seats-info">
+                            ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE} seats
+                        </div>
+                        <div class="people-list">
+                            ${config.people && config.people.length > 0
+                    ? config.people.map((person, index) => `
+                                    <div class="person-entry">
+                                        <span class="person-order">${index + 1}.</span>
+                                        <span>${person.name}</span>
+                                    </div>
+                                `).join('')
+                    : '<div class="empty-message">No one here yet</div>'
+                }
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('timers-container').innerHTML = timerHTML;
+
+            document.querySelectorAll('.timer').forEach(timer => {
+                const line = timer.dataset.line;
+                let lastBellTime = null;
+                const label = timer.querySelector('.label');
+                const countElement = timer.querySelector('.count');
+                const timerContainer = timer.closest('.timer-container');
+
+                function update() {
+                    if (!scheduledTimes[line]) return;
+
+                    const now = Date.now();
+                    const startT = scheduledTimes[line];
+                    let remaining, status;
+
+                    if (now < startT) {
+                        const timeUntilStart = startT - now;
+                        const minutesUntilStart = Math.floor(timeUntilStart / 60000);
+                        const displayMinutes = minutesUntilStart < 1 ? "< 1" : minutesUntilStart;
+                        countElement.innerHTML = `Starting in ${displayMinutes} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
+                        countElement.classList.add('starting-text');
+                        timer.classList.remove('finish-window');
+
+                        // Add blinking effect if within blink time
+                        if (timeUntilStart <= BLINK_TIME_MIN * 60000) {
+                            timer.classList.add('blinking');
+                        } else {
+                            timer.classList.remove('blinking');
+                        }
+
+                        status = 'inactive';
+                    } else {
+                        countElement.classList.remove('starting-text');
+                        timer.classList.remove('blinking');
+                        const elapsed = now - startT;
+
+                        // Reset auto reschedule flag logic removed
+
+                        if (elapsed >= TOTAL_SESSION_TIME) {
+                            countElement.textContent = "00:00";
+                            timer.classList.remove('finish-window');
+                            status = 'inactive';
+
+                            // Check auto reschedule setting
+                            const autoRescheduleValue = document.getElementById('autoReschedule').value;
+                            const config = lineConfigs.find(c => c.id === parseInt(line));
+                            if (autoRescheduleValue !== 'off') {
+                                // Reschedule timer for now + autoRescheduleValue minutes, rounded to next 5-min slot
+                                const nextStart = getNextFiveMinuteSlot(Date.now(), parseInt(autoRescheduleValue));
+                                scheduledTimes[line] = nextStart;
+                                if (config) {
+                                    config.time = formatTime(new Date(nextStart));
+                                    // Update the time select element
+                                    const timeSelect = document.getElementById(`time${config.id}`);
+                                    if (timeSelect) {
+                                        timeSelect.value = config.time;
+                                    }
+                                }
+                            } else {
+                                // Clear scheduled time and line configuration
+                                delete scheduledTimes[line];
+                                if (config) {
+                                    config.time = '';
+                                    // Update the time select element
+                                    const timeSelect = document.getElementById(`time${config.id}`);
+                                    if (timeSelect) {
+                                        timeSelect.value = '';
+                                    }
+                                }
+                            }
+
+                            // Save state after all updates
+                            saveState();
+                        } else {
+                            remaining = TOTAL_SESSION_TIME - elapsed;
+                            const mm = Math.floor(remaining / 60000);
+                            const ss = Math.floor((remaining % 60000) / 1000);
+                            // Check finish window
+                            if (remaining <= FINISH_WINDOW_MIN * 60000) {
+                                countElement.textContent = "This line's time is over";
+                                countElement.classList.add('lounge-text');
+                                timer.classList.add('finish-window');
+                            } else {
+                                countElement.textContent = `${pad(mm)}:${pad(ss)}`;
+                                countElement.classList.remove('lounge-text');
+                                timer.classList.remove('finish-window');
+                            }
+                            status = 'active';
+
+                            // Only trigger alarm if the timer is actually running and we've passed an interval
+                            if (status === 'active') {
+                                const currentInterval = Math.floor(elapsed / MS5);
+                                if (lastBellTime === null) {
+                                    lastBellTime = currentInterval;
+                                } else if (currentInterval > lastBellTime) {
+                                    // Only play alarm if we're not in the middle of updating UI or settings
+                                    if (!isUpdatingUI && !window.isUpdatingSettings) {
+                                        showChangeSeatNotification();
+                                    }
+                                    lastBellTime = currentInterval;
+                                }
+
+                                // Check for 30-second alarm (30 seconds before main alarm)
+                                const timeUntilNextAlarm = MS5 - (elapsed % MS5);
+                                if (timeUntilNextAlarm <= 30000 && timeUntilNextAlarm > 29800) { // 30 seconds ± 200ms tolerance
+                                    // Only play 30-second alarm if we're not in the middle of updating UI or settings
+                                    if (!isUpdatingUI && !window.isUpdatingSettings) {
+                                        showThirtySecondAlarm();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    timer.classList.toggle('active', status === 'active');
+                    timer.classList.toggle('inactive', status === 'inactive');
+                }
+                setInterval(update, 200);
+                update();
+            });
+
+            // Update next line information when timers are updated
+            updateNextLineInfo();
+        }
+
+        function addPerson(lineId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config) return;
+
+            const input = document.getElementById(`newPerson${lineId}`);
+            const name = input.value.trim();
+
+            if (name && (!config.people || config.people.length < MAX_PEOPLE_PER_LINE)) {
+                if (!config.people) config.people = [];
+                config.people.push({
+                    id: Date.now(),
+                    name: name
+                });
+                input.value = '';
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        })),
+                        generalWaitQueue: generalWaitQueue
+                    }
+                };
+                saveState(state);
+            } else if (name && config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
+                alert(`Maximum number of people (${MAX_PEOPLE_PER_LINE}) reached for this line`);
+            }
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function removePerson(lineId, personId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config || !config.people) return;
+
+            config.people = config.people.filter(p => p.id !== personId);
+            updateLineConfigs();
+            updateTimers();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        id: config.id,
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    })),
+                    generalWaitQueue: generalWaitQueue
+                }
+            };
+            saveState(state);
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function clearPeople(lineId) {
+            if (currentRole === 'viewer') return;
+
+            if (confirm('Are you sure you want to clear all people from this line?')) {
+                isUpdatingUI = true;  // Set flag before UI update
+                const config = lineConfigs.find(c => c.id === lineId);
+                if (!config) return;
+
+                config.people = [];
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        })),
+                        generalWaitQueue: generalWaitQueue
+                    }
+                };
+                saveState(state);
+
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    isUpdatingUI = false;
+                }, 1000);
+            }
+        }
+
+        function handlePersonInput(event, lineId) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addPerson(lineId);
+            }
+        }
+
+        // Wait Queue Management Functions
+        function addToWaitQueue(lineId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config) return;
+
+            const input = document.getElementById(`newWaitQueuePerson${lineId}`);
+            const name = input.value.trim();
+
+            if (name) {
+                if (!config.waitQueue) config.waitQueue = [];
+                config.waitQueue.push({
+                    id: Date.now(),
+                    name: name
+                });
+                input.value = '';
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        }))
+                    }
+                };
+                saveState(state);
+            }
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function removeFromWaitQueue(lineId, personId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config || !config.waitQueue) return;
+
+            config.waitQueue = config.waitQueue.filter(p => p.id !== personId);
+            updateLineConfigs();
+            updateTimers();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        id: config.id,
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    }))
+                }
+            };
+            saveState(state);
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function clearWaitQueue(lineId) {
+            if (currentRole === 'viewer') return;
+
+            if (confirm('Are you sure you want to clear the entire wait queue?')) {
+                isUpdatingUI = true;  // Set flag before UI update
+                const config = lineConfigs.find(c => c.id === lineId);
+                if (!config) return;
+
+                config.waitQueue = [];
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state without version to prevent conflicts
+                const state = {
+                    timestamp: Date.now() / 1000,
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        }))
+                    }
+                };
+                saveState(state);
+
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    isUpdatingUI = false;
+                }, 1000);
+            }
+        }
+
+        function promoteFromWaitQueue(lineId) {
+            if (currentRole === 'viewer') return;
+
+            isUpdatingUI = true;  // Set flag before UI update
+            const config = lineConfigs.find(c => c.id === lineId);
+            if (!config || !config.waitQueue || config.waitQueue.length === 0) return;
+
+            // Clear current people in the line
+            config.people = [];
+
+            // Move people from wait queue to line (up to the limit)
+            const peopleToPromote = Math.min(config.waitQueue.length, MAX_PEOPLE_PER_LINE);
+            const promotedPeople = config.waitQueue.slice(0, peopleToPromote);
+            const remainingInQueue = config.waitQueue.slice(peopleToPromote);
+
+            config.people = promotedPeople;
+            config.waitQueue = remainingInQueue;
+
+            updateLineConfigs();
+            updateTimers();
+
+            // Save state without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        id: config.id,
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    }))
+                }
+            };
+            saveState(state);
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        function handleWaitQueueInput(event, lineId) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addToWaitQueue(lineId);
+            }
+        }
+
+        // Add event listeners for global settings
+        document.getElementById('sessionDuration').addEventListener('change', function () {
+            updateTimingSettings();
+            updateTimers();
+        });
+
+        document.getElementById('alarmInterval').addEventListener('change', function () {
+            updateTimingSettings();
+            updateTimers();
+        });
+
+        document.getElementById('finishWindow').addEventListener('change', function () {
+            FINISH_WINDOW_MIN = parseInt(this.value);
+            saveState();
+            updateTimers();
+        });
+
+        document.getElementById('maxPeople').addEventListener('change', function () {
+            MAX_PEOPLE_PER_LINE = parseInt(this.value);
+            saveState();
+            updateLineConfigs();
+            updateTimers();
+        });
+
+        document.getElementById('blinkTime').addEventListener('change', function () {
+            BLINK_TIME_MIN = parseInt(this.value);
+            saveState();
+            updateTimers();
+        });
+
+        document.getElementById('autoReschedule').addEventListener('change', function () {
+            AUTO_RESCHEDULE_MIN = this.value;
+            saveState();
+        });
+
+        // Function to get role from URL parameters
+        function getRoleFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const role = urlParams.get('role');
+            // Only allow valid roles
+            if (role && ['admin', 'dispatcher', 'viewer'].includes(role)) {
+                return role;
+            }
+            return 'viewer'; // Default to viewer if no valid role is provided
+        }
+
+        // Function to update UI based on role
+        function updateUIBasedOnRole() {
+            isUpdatingUI = true;  // Set flag before UI update
+            currentRole = getRoleFromUrl();
+            const configSection = document.getElementById('configSection');
+            const configContent = document.getElementById('configContent');
+            const globalSettings = configContent.querySelector('.global-settings');
+            const addLineBtn = configContent.querySelector('.add-line-btn');
+            const formButtons = configContent.querySelector('.form-buttons');
+            const linesContainer = document.getElementById('linesContainer');
+
+            // Set data-role attribute for mobile styles
+            if (configSection) {
+                configSection.setAttribute('data-role', currentRole);
+            }
+
+            if (currentRole === 'viewer') {
+                // Hide entire config section for viewers
+                if (configSection) configSection.style.display = 'none';
+                if (globalSettings) globalSettings.style.display = 'none';
+                if (addLineBtn) addLineBtn.style.display = 'none';
+                if (formButtons) formButtons.style.display = 'none';
+                if (linesContainer) linesContainer.style.display = 'block';
+            } else if (currentRole === 'dispatcher') {
+                // Show config section but hide global settings and add line button for dispatchers
+                if (configSection) configSection.style.display = 'block';
+                if (globalSettings) globalSettings.style.display = 'none';
+                if (addLineBtn) addLineBtn.style.display = 'none';
+                if (formButtons) formButtons.style.display = 'none';
+                if (linesContainer) linesContainer.style.display = 'block';
+            } else {
+                // Show all config elements for admin
+                if (configSection) configSection.style.display = 'block';
+                if (globalSettings) globalSettings.style.display = 'block';
+                if (addLineBtn) addLineBtn.style.display = 'block';
+                if (formButtons) formButtons.style.display = 'block';
+                if (linesContainer) linesContainer.style.display = 'block';
+            }
+
+            // Update line configs to reflect new permissions
+            updateLineConfigs();
+
+            // Reset flag after a short delay to ensure all updates are complete
+            setTimeout(() => {
+                isUpdatingUI = false;
+            }, 1000);
+        }
+
+        // Initialize UI based on role when DOM is ready
+        document.addEventListener('DOMContentLoaded', function () {
+            updateUIBasedOnRole();
+        });
+
+        // Firebase automatically loads state via the real-time listener above
+        // No need for explicit state loading
+
+        // Password protection
+        const PASSWORD = 'speedchat2025';
+        const PASSWORD_STORAGE_KEY = 'speedchat_password_verified';
+
+        function checkPassword() {
+            const input = document.getElementById('passwordInput');
+            const error = document.getElementById('passwordError');
+            const modal = document.getElementById('passwordModal');
+
+            if (input.value === PASSWORD) {
+                localStorage.setItem(PASSWORD_STORAGE_KEY, 'true');
+                modal.classList.remove('visible');
+                document.body.style.overflow = 'auto';
+            } else {
+                error.style.display = 'block';
+                input.value = '';
+            }
+        }
+
+        // Check password on page load
+        window.addEventListener('load', function () {
+            const isVerified = localStorage.getItem(PASSWORD_STORAGE_KEY) === 'true';
+            if (!isVerified) {
+                const modal = document.getElementById('passwordModal');
+                modal.classList.add('visible');
+                document.body.style.overflow = 'hidden';
+            }
+        });
+
+        // Allow Enter key to submit password
+        document.getElementById('passwordInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                checkPassword();
+            }
+        });
+
+        // Add updateTimingSettings function
+        function updateTimingSettings() {
+            const sessionMinutes = parseInt(document.getElementById('sessionDuration').value);
+            const alarmMinutes = parseInt(document.getElementById('alarmInterval').value);
+            BLINK_TIME_MIN = parseInt(document.getElementById('blinkTime').value);
+            FINISH_WINDOW_MIN = parseInt(document.getElementById('finishWindow').value);
+            AUTO_RESCHEDULE_MIN = document.getElementById('autoReschedule').value;
+
+            TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
+            MS5 = alarmMinutes * 60 * 1000;
+
+            // Create state update without version to prevent conflicts
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: sessionMinutes.toString(),
+                    alarmInterval: alarmMinutes.toString(),
+                    maxPeoplePerLine: MAX_PEOPLE_PER_LINE.toString(),
+                    blinkBeforeStart: document.getElementById('blinkBeforeStart')?.checked || false,
+                    blinkTime: BLINK_TIME_MIN.toString(),
+                    finishWindow: FINISH_WINDOW_MIN.toString(),
+                    autoReschedule: AUTO_RESCHEDULE_MIN,
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []
+                        })),
+                    generalWaitQueue: generalWaitQueue
+                }
+            };
+
+            // Save state immediately
+            saveState(state);
+        }
+
+        // Firebase-based saveState function
+        async function saveState(stateToSave = null) {
+            try {
+                // #region agent log
+                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2624',message:'saveState: called',data:{hasPrebuiltState:!!stateToSave,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
+                // #endregion
+                
+                const state = stateToSave || {
+                    timestamp: Date.now(),
+                    config: {
+                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                        blinkTime: document.getElementById("blinkTime")?.value || "5",
+                        finishWindow: document.getElementById("finishWindow")?.value || "5",
+                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                        lines: lineConfigs.map(config => ({
+                            id: config.id,
+                            name: config.name,
+                            time: config.time || '',
+                            people: config.people || [],
+                            waitQueue: config.waitQueue || []  // Now properly persisted
+                        })),
+                        generalWaitQueue: generalWaitQueue
+                    }
+                };
+
+                // #region agent log
+                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2645',message:'saveState: about to save to Firebase',data:{linesInState:state.config.lines.map(l=>({id:l.id,name:l.name,hasUndefinedId:l.id===undefined}))},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
+                // #endregion
+
+                console.log('Saving state to Firebase:', state);
+                await stateRef.set(state);
+                console.log('State saved successfully to Firebase');
+            } catch (error) {
+                console.error("Error saving state to Firebase:", error);
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2653',message:'saveState: error caught',data:{errorMessage:error.message,errorStack:error.stack},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                // #endregion
+                
+                alert("Failed to save changes. Please check your connection and try again.");
+            }
+        }
+
+        function resetApplication() {
+            if (confirm('Are you sure you want to reset all settings? This will clear all saved configurations and timers.')) {
+                // Clear localStorage
+                localStorage.removeItem('speedChatConfig');
+
+                // Reset variables
+                lineConfigs = [];
+                scheduledTimes = {};
+                TOTAL_SESSION_TIME = 30 * 60 * 1000;
+                MS5 = 5 * 60 * 1000;
+                FINISH_WINDOW_MIN = 5;
+                MAX_PEOPLE_PER_LINE = 10;
+                BLINK_TIME_MIN = 5;
+                AUTO_RESCHEDULE_MIN = 'off';
+
+                // Reset form values
+                document.getElementById('sessionDuration').value = '30';
+                document.getElementById('alarmInterval').value = '5';
+                document.getElementById('finishWindow').value = FINISH_WINDOW_MIN;
+                document.getElementById('maxPeople').value = '10';
+                document.getElementById('blinkTime').value = '5';
+
+                // Clear timers container and lines container
+                document.getElementById('timers-container').innerHTML = '';
+                document.getElementById('linesContainer').innerHTML = '';
+
+                // Hide notification if visible
+                document.getElementById('changeSeatNotification').style.display = 'none';
+                document.getElementById('notificationOverlay').style.display = 'none';
+
+                // Update UI
+                updateLineConfigs();
+                updateTimers();
+
+                // Save state to server
+                saveState();
+            }
+        }
+
+        // Add event listener for the reset button
+        document.querySelector('.reset-btn').addEventListener('click', function (e) {
+            e.preventDefault();
+            resetApplication();
+        });
+
+        // Add this after the DOMContentLoaded event listener
+        document.addEventListener('DOMContentLoaded', function () {
+            // Set initial toggle state from localStorage
+            const alarmToggle = document.getElementById('alarmToggle');
+            alarmToggle.checked = alarmsEnabled;
+
+            // Add event listener for toggle changes
+            alarmToggle.addEventListener('change', function () {
+                alarmsEnabled = this.checked;
+                localStorage.setItem('alarmsEnabled', alarmsEnabled);
+            });
+        });
+
+        // Update the wait queue indicator on the main UI
+        function updateWaitQueueIndicator() {
+            const indicator = document.getElementById('waitQueueCount');
+            if (indicator) {
+                indicator.textContent = generalWaitQueue.length;
+            }
+        }
+
+        // Render the general wait queue UI
+        function renderGeneralWaitQueue() {
+            const list = document.getElementById('generalWaitQueueList');
+            const count = document.getElementById('generalWaitQueueCount');
+            const bulkPromote = document.getElementById('bulkPromoteButtons');
+            if (!list || !count || !bulkPromote) return;
+            list.innerHTML = '';
+            count.textContent = generalWaitQueue.length;
+
+            // Update the main UI indicator
+            updateWaitQueueIndicator();
+
+            // Render each person
+            generalWaitQueue.forEach((person, idx) => {
+                const entry = document.createElement('div');
+                entry.className = 'wait-queue-entry';
+                entry.style.display = 'flex';
+                entry.style.justifyContent = 'space-between';
+                entry.style.alignItems = 'center';
+                entry.innerHTML = `
+                    <div style="display: flex; align-items: center;">
+                        <span class="person-order">${idx + 1}.</span>
+                        <span>${person.name}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <div style="position: relative;">
+                            <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown(${person.id})">Move</button>
+                            <div id="moveDropdown${person.id}" style="display: none; position: absolute; right: 0; background: white; border: 1px solid #ff97d7; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem; min-width: 100px;">
+                                ${lineConfigs.map(line => `
+                                    <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine(${person.id}, ${line.id}); toggleMoveDropdown(${person.id})">${line.name}</button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <button type="button" style="color: #8f0057; font-size: 1.2rem; background: none; border: none; cursor: pointer;" onclick="removeFromGeneralWaitQueue(${person.id})">×</button>
+                    </div>
+                `;
+                list.appendChild(entry);
+            });
+            // Bulk promote buttons
+            bulkPromote.innerHTML = lineConfigs.map(line => `
+                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote to ${line.name}</button>
+            `).join('');
+        }
+
+        // Add person to general wait queue
+        function addGeneralWaitQueuePerson() {
+            const input = document.getElementById('newGeneralWaitQueuePerson');
+            const name = input.value.trim();
+            if (name) {
+                generalWaitQueue.push({ id: Date.now(), name });
+                input.value = '';
+                saveGeneralWaitQueue();
+            }
+        }
+
+        // Remove person from general wait queue
+        function removeFromGeneralWaitQueue(personId) {
+            generalWaitQueue = generalWaitQueue.filter(p => p.id !== personId);
+            saveGeneralWaitQueue();
+        }
+
+        // Clear all from general wait queue
+        function clearGeneralWaitQueue() {
+            if (confirm('Are you sure you want to clear the entire wait queue?')) {
+                generalWaitQueue = [];
+                saveGeneralWaitQueue();
+            }
+        }
+
+        // Promote a single person to a line
+        function promotePersonToLine(personId, lineId) {
+            const personIdx = generalWaitQueue.findIndex(p => p.id === personId);
+            if (personIdx === -1) return;
+            const person = generalWaitQueue[personIdx];
+            const line = lineConfigs.find(l => l.id === lineId);
+            if (!line) return;
+            if (!line.people) line.people = [];
+            if (line.people.length < MAX_PEOPLE_PER_LINE) {
+                line.people.push(person);
+                generalWaitQueue.splice(personIdx, 1);
+                saveGeneralWaitQueue();
+            } else {
+                alert(`Line ${line.name} is already full.`);
+            }
+        }
+
+        // Bulk promote from wait queue to a line (fill up to capacity)
+        function bulkPromoteToLine(lineId) {
+            const line = lineConfigs.find(l => l.id === lineId);
+            if (!line) return;
+            if (!line.people) line.people = [];
+            const available = MAX_PEOPLE_PER_LINE - line.people.length;
+            if (available <= 0) {
+                alert(`Line ${line.name} is already full.`);
+                return;
+            }
+            const toPromote = generalWaitQueue.slice(0, available);
+            line.people = line.people.concat(toPromote);
+            generalWaitQueue = generalWaitQueue.slice(available);
+            saveGeneralWaitQueue();
+        }
+
+        // Save general wait queue and sync state
+        function saveGeneralWaitQueue() {
+            // Save state with generalWaitQueue
+            const state = {
+                timestamp: Date.now() / 1000,
+                config: {
+                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                    blinkTime: document.getElementById("blinkTime")?.value || "5",
+                    finishWindow: document.getElementById("finishWindow")?.value || "5",
+                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
+                    lines: lineConfigs.map(config => ({
+                        id: config.id,
+                        name: config.name,
+                        time: config.time || '',
+                        people: config.people || [],
+                        waitQueue: config.waitQueue || []
+                    })),
+                    generalWaitQueue: generalWaitQueue
+                }
+            };
+            saveState(state);
+            renderGeneralWaitQueue();
+            updateLineConfigs();
+        }
+
+        // Hook up event listeners
+        setTimeout(() => {
+            const addBtn = document.getElementById('addGeneralWaitQueuePersonBtn');
+            const clearBtn = document.getElementById('clearGeneralWaitQueueBtn');
+            const input = document.getElementById('newGeneralWaitQueuePerson');
+
+            if (addBtn) addBtn.onclick = addGeneralWaitQueuePerson;
+            if (clearBtn) clearBtn.onclick = clearGeneralWaitQueue;
+            if (input) {
+                input.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') addGeneralWaitQueuePerson();
+                });
+            }
+            renderGeneralWaitQueue();
+        }, 500);
+
+        // Re-render wait queue on state update
+        const oldUpdateUIFromState = updateUIFromState;
+        updateUIFromState = function (config) {
+            oldUpdateUIFromState(config);
+            renderGeneralWaitQueue();
+        };
+
+        // Toggle move dropdown for a specific person
+        function toggleMoveDropdown(personId) {
+            const dropdown = document.getElementById(`moveDropdown${personId}`);
+            if (dropdown) {
+                // Close all other dropdowns first
+                document.querySelectorAll('[id^="moveDropdown"]').forEach(d => {
+                    if (d.id !== `moveDropdown${personId}`) {
+                        d.style.display = 'none';
+                    }
+                });
+
+                // Toggle current dropdown
+                dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest('[id^="moveDropdown"]') && !event.target.closest('button[onclick*="toggleMoveDropdown"]')) {
+                document.querySelectorAll('[id^="moveDropdown"]').forEach(d => {
+                    d.style.display = 'none';
+                });
+            }
+        });
+
+        // Update current time display
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const timeElement = document.getElementById('currentTime');
+            if (timeElement) {
+                timeElement.textContent = timeString;
+            }
+        }
+
+        // Initialize and update current time
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+
+        // Helper to get the next 5-minute slot after a given interval
+        function getNextFiveMinuteSlot(baseTime, intervalMinutes) {
+            const d = new Date(baseTime + intervalMinutes * 60 * 1000);
+            d.setSeconds(0, 0);
+            const minutes = d.getMinutes();
+            const next5 = Math.ceil(minutes / 5) * 5;
+            if (next5 === 60) {
+                d.setHours(d.getHours() + 1);
+                d.setMinutes(0);
+            } else {
+                d.setMinutes(next5);
+            }
+            return d.getTime();
+        }
+
+        // Function to update next line information
+        function updateNextLineInfo() {
+            const nextLineInfoElement = document.getElementById('nextLineInfo');
+            if (!nextLineInfoElement) return;
+
+            const now = Date.now();
+            let nextLineToStart = null;
+            let nextLineToFinish = null;
+            let minTimeToStart = Infinity;
+            let minTimeToFinish = Infinity;
+
+            // Find the line that will start next and the line that will finish next
+            lineConfigs.forEach(config => {
+                if (config.time && scheduledTimes[config.id]) {
+                    const startTime = scheduledTimes[config.id];
+                    const endTime = startTime + TOTAL_SESSION_TIME;
+
+                    // Check if this line hasn't started yet
+                    if (startTime > now) {
+                        const timeToStart = startTime - now;
+                        if (timeToStart < minTimeToStart) {
+                            minTimeToStart = timeToStart;
+                            nextLineToStart = config;
+                        }
+                    }
+
+                    // Check if this line is currently running and will finish soon
+                    if (startTime <= now && endTime > now) {
+                        const timeToFinish = endTime - now;
+                        if (timeToFinish < minTimeToFinish) {
+                            minTimeToFinish = timeToFinish;
+                            nextLineToFinish = config;
+                        }
+                    }
+                }
+            });
+
+            // Display the appropriate information
+            if (nextLineToStart && minTimeToStart !== Infinity) {
+                const minutesToStart = Math.floor(minTimeToStart / 60000);
+                const displayMinutes = minutesToStart < 1 ? "< 1" : minutesToStart;
+                nextLineInfoElement.textContent = `Next: ${nextLineToStart.name} starts in ${displayMinutes} min`;
+            } else if (nextLineToFinish && minTimeToFinish !== Infinity) {
+                const minutesToFinish = Math.floor(minTimeToFinish / 60000);
+                const displayMinutes = minutesToFinish < 1 ? "< 1" : minutesToFinish;
+                nextLineInfoElement.textContent = `${nextLineToFinish.name} finishes in ${displayMinutes} min`;
+            } else {
+                // Check if any lines are scheduled for later today
+                const futureLines = lineConfigs.filter(config =>
+                    config.time && scheduledTimes[config.id] && scheduledTimes[config.id] > now
+                );
+
+                if (futureLines.length > 0) {
+                    // Find the earliest future line
+                    const earliestFutureLine = futureLines.reduce((earliest, current) => {
+                        return scheduledTimes[current.id] < scheduledTimes[earliest.id] ? current : earliest;
+                    });
+                    const timeToStart = scheduledTimes[earliestFutureLine.id] - now;
+                    const minutesToStart = Math.floor(timeToStart / 60000);
+                    const displayMinutes = minutesToStart < 1 ? "< 1" : minutesToStart;
+                    nextLineInfoElement.textContent = `Next: ${earliestFutureLine.name} starts in ${displayMinutes} min`;
+                } else {
+                    nextLineInfoElement.textContent = "No lines scheduled";
+                }
+            }
+        }
+
+        // Update next line information every 30 seconds
+        setInterval(updateNextLineInfo, 30000);
+
+        // Initial update
+        setTimeout(updateNextLineInfo, 1000);
+    </script>
+</body>
+
+</html>
