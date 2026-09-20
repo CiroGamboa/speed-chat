@@ -1,0 +1,17 @@
+{
+  "name": "speed-chat-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Realistic multi-actor simulation tests for the Speed-Chat app (Firebase RTDB sync + alarm reliability).",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "serve:fixed": "python3 -m http.server 8080",
+    "serve:unfixed": "python3 -m http.server 8081 --directory tests/fixtures"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

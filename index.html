@@ -1396,33 +1396,34 @@
 
         let lineOrder = [];
 
-        // Enable audio on first user interaction
-        document.addEventListener('click', function enableAudio() {
-            if (!audioEnabled) {
-                audioEnabled = true;
-                // Try to play and immediately pause to enable audio for both alarms
-                Promise.all([
-                    bell.play().then(() => {
-                        bell.pause();
-                        bell.currentTime = 0;
-                        console.log('Main alarm audio enabled successfully');
-                    }).catch(error => {
-                        console.error('Error enabling main alarm audio:', error);
-                    }),
-                    bell30s.play().then(() => {
-                        bell30s.pause();
-                        bell30s.currentTime = 0;
-                        console.log('30-second alarm audio enabled successfully');
-                    }).catch(error => {
-                        console.error('Error enabling 30-second alarm audio:', error);
-                    })
-                ]).then(() => {
-                    console.log('All audio enabled successfully');
-                });
-                // Remove the event listener after first interaction
-                document.removeEventListener('click', enableAudio);
-            }
-        }, { once: true });
+        // Enable audio on first user interaction. Listen for click, keydown AND touchstart so a
+        // tap or keypress unlocks audio on tablets/phones too (not just a mouse click).
+        const _audioUnlockEvents = ['click', 'keydown', 'touchstart'];
+        function enableAudio() {
+            if (audioEnabled) return;
+            audioEnabled = true;
+            // Try to play and immediately pause to unlock both alarm clips for later programmatic play.
+            Promise.all([
+                bell.play().then(() => {
+                    bell.pause();
+                    bell.currentTime = 0;
+                    console.log('Main alarm audio enabled successfully');
+                }).catch(error => {
+                    console.error('Error enabling main alarm audio:', error);
+                }),
+                bell30s.play().then(() => {
+                    bell30s.pause();
+                    bell30s.currentTime = 0;
+                    console.log('30-second alarm audio enabled successfully');
+                }).catch(error => {
+                    console.error('Error enabling 30-second alarm audio:', error);
+                })
+            ]).then(() => {
+                console.log('All audio enabled successfully');
+            });
+            _audioUnlockEvents.forEach(evt => document.removeEventListener(evt, enableAudio));
+        }
+        _audioUnlockEvents.forEach(evt => document.addEventListener(evt, enableAudio, { once: false }));
 
         // Get the duration of the alarm sounds and ensure they're loaded
         bell.addEventListener('loadeddata', function () {
@@ -1457,6 +1458,16 @@
             appId: "1:161932405521:web:ca92e8c1f23d924006bab0"
         };
 
+        // Optional state namespace override (used by the test harness; defaults to 'state').
+        // Keeps live event data at /state untouched when a ?stateNs=... param is supplied.
+        function getStateNamespace() {
+            try {
+                const ns = new URLSearchParams(window.location.search).get('stateNs');
+                if (ns && /^[A-Za-z0-9_-]{1,64}$/.test(ns)) return ns;
+            } catch (e) { /* ignore */ }
+            return 'state';
+        }
+
         // Initialize Firebase
         let database = null;
         let stateRef = null;
@@ -1464,11 +1475,168 @@
         try {
             firebase.initializeApp(firebaseConfig);
             database = firebase.database();
-            stateRef = database.ref('state');
-            console.log('Firebase initialized successfully');
+            stateRef = database.ref(getStateNamespace());
+            console.log('Firebase initialized successfully (namespace: ' + getStateNamespace() + ')');
         } catch (error) {
             console.error('Error initializing Firebase:', error);
             alert('Failed to initialize Firebase. Please check your configuration.');
+        }
+
+        // ========================================
+        // Data-model helpers: keyed objects <-> arrays, granular writes, migration
+        // ========================================
+        // Firebase Realtime Database merges writes at the granularity of the path you write to.
+        // The previous code wrote the ENTIRE /state tree on every action (stateRef.set(fullState)),
+        // which is last-write-wins and silently clobbers concurrent edits from other devices.
+        // We now store lines/people/queues as KEYED OBJECTS and write only the specific child path
+        // that changed, so concurrent logging merges instead of overwriting.
+
+        let migrationDone = false;
+
+        function newId() {
+            try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* ignore */ }
+            return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        }
+
+        function isNumericKey(k) { return /^\d+$/.test(String(k)); }
+
+        // Convert a Firebase keyed object (or legacy array) of entries into a sorted array
+        // of { id, name, ts }. `id` is the Firebase child key (used to target granular writes).
+        function entriesToArray(obj) {
+            if (!obj) return [];
+            let arr;
+            if (Array.isArray(obj)) {
+                arr = obj.filter(Boolean).map((p, i) => ({
+                    id: (p.id != null ? String(p.id) : ('legacy-' + i)),
+                    name: p.name || '',
+                    ts: p.ts || 0
+                }));
+            } else {
+                arr = Object.entries(obj).map(([key, p]) => ({
+                    id: key,
+                    name: (p && p.name) || '',
+                    ts: (p && p.ts) || 0
+                }));
+            }
+            arr.sort((a, b) => (a.ts - b.ts) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+            return arr;
+        }
+
+        // Convert the config.lines keyed object (or legacy array) into a sorted array of line configs.
+        function linesToArray(linesObj) {
+            if (!linesObj) return [];
+            let arr;
+            if (Array.isArray(linesObj)) {
+                arr = linesObj.filter(Boolean).map((l, i) => ({
+                    id: (l.id != null ? String(l.id) : ('legacy-' + i)),
+                    name: l.name || ('Line ' + (i + 1)),
+                    time: l.time || '',
+                    order: (typeof l.order === 'number') ? l.order : i,
+                    people: entriesToArray(l.people),
+                    waitQueue: entriesToArray(l.waitQueue)
+                }));
+            } else {
+                arr = Object.entries(linesObj).map(([key, l], i) => ({
+                    id: key,
+                    name: (l && l.name) || 'Line',
+                    time: (l && l.time) || '',
+                    order: (l && typeof l.order === 'number') ? l.order : i,
+                    people: entriesToArray(l && l.people),
+                    waitQueue: entriesToArray(l && l.waitQueue)
+                }));
+            }
+            arr.sort((a, b) => (a.order - b.order) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+            return arr;
+        }
+
+        // Detect old array-shaped data (or numeric line keys) that must be migrated to keyed objects.
+        function isLegacyShape(cfg) {
+            if (!cfg) return false;
+            if (Array.isArray(cfg.lines)) return true;
+            if (Array.isArray(cfg.generalWaitQueue)) return true;
+            if (cfg.lines && typeof cfg.lines === 'object') {
+                for (const k of Object.keys(cfg.lines)) {
+                    if (isNumericKey(k)) return true; // numeric keys => Firebase treats as array
+                    const l = cfg.lines[k];
+                    if (l && (Array.isArray(l.people) || Array.isArray(l.waitQueue))) return true;
+                    if (l && l.people && typeof l.people === 'object') {
+                        if (Object.keys(l.people).some(isNumericKey)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Build a keyed { key: {name, ts} } object from a local array, regenerating any numeric ids
+        // (numeric keys are a Firebase footgun — they get coerced back into arrays).
+        function toKeyedEntries(arr) {
+            const o = {};
+            (arr || []).forEach((p, i) => {
+                let k = p.id;
+                if (k == null || isNumericKey(k) || String(k).startsWith('legacy-')) k = newId();
+                o[k] = { name: p.name, ts: p.ts || (Date.now() + i) };
+            });
+            return o;
+        }
+
+        function currentScalars() {
+            return {
+                sessionDuration: document.getElementById("sessionDuration")?.value || "30",
+                alarmInterval: document.getElementById("alarmInterval")?.value || "5",
+                maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
+                blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
+                blinkTime: document.getElementById("blinkTime")?.value || "5",
+                finishWindow: document.getElementById("finishWindow")?.value || "5",
+                autoReschedule: document.getElementById("autoReschedule")?.value || "off"
+            };
+        }
+
+        // One-time migration: rebuild the whole tree in keyed form from the freshly-parsed local
+        // arrays. Safe as a single set() because it runs on first load, before concurrent granular
+        // writes begin. Guarded so it only happens once and never for viewers.
+        function migrateToKeyed() {
+            if (migrationDone || currentRole === 'viewer' || !stateRef) return;
+            migrationDone = true;
+            const linesObj = {};
+            lineConfigs.forEach((c, i) => {
+                let k = c.id;
+                if (k == null || isNumericKey(k) || String(k).startsWith('legacy-')) k = newId();
+                linesObj[k] = { name: c.name || ('Line ' + (i + 1)), time: c.time || '', order: (typeof c.order === 'number') ? c.order : i };
+                const people = toKeyedEntries(c.people);
+                if (Object.keys(people).length) linesObj[k].people = people;
+                const wq = toKeyedEntries(c.waitQueue);
+                if (Object.keys(wq).length) linesObj[k].waitQueue = wq;
+            });
+            const tree = { timestamp: Date.now(), config: Object.assign(currentScalars(), { lines: linesObj }) };
+            const gwq = toKeyedEntries(generalWaitQueue);
+            if (Object.keys(gwq).length) tree.config.generalWaitQueue = gwq;
+            console.log('Migrating legacy state to keyed structure');
+            stateRef.set(tree).catch(err => console.error('Migration write failed:', err));
+        }
+
+        function handleWriteError(err) {
+            // RTDB caches writes while offline and resolves them on reconnect; a rejection here
+            // usually means permission denied. Log rather than alert so events/tests aren't disrupted.
+            if (err) console.error('Firebase write error:', err);
+        }
+
+        function lineRef(id) { return stateRef.child('config/lines/' + id); }
+
+        // The database security rules enforce `.validate: newData.hasChildren(['timestamp','config'])`
+        // at /state, and that validation cascades to descendant writes. So on an EMPTY /state the
+        // first granular write (which doesn't include `timestamp`) is rejected with permission denied.
+        // A writer therefore seeds a minimal valid { timestamp, config } once, via a TRANSACTION so
+        // that concurrent writers don't clobber each other or any data that already exists.
+        let _seedAttempted = false;
+        function ensureSeeded(rawState) {
+            if (currentRole === 'viewer' || !stateRef) return;
+            if (rawState && rawState.timestamp && rawState.config) return; // already valid
+            if (_seedAttempted) return;
+            _seedAttempted = true;
+            stateRef.transaction(function (cur) {
+                if (cur && cur.timestamp && cur.config) return; // someone else seeded -> abort
+                return { timestamp: Date.now(), config: currentScalars() };
+            }, function (err) { if (err) console.error('Seed transaction failed:', err); }, false);
         }
 
         // ========================================
@@ -1479,7 +1647,11 @@
         if (stateRef) {
             stateRef.on('value', (snapshot) => {
                 const newState = snapshot.val();
-                
+
+                // Seed a minimal valid tree if the DB is empty/invalid (required by the .validate
+                // rule before any granular write can succeed). No-op for viewers and once-seeded.
+                ensureSeeded(newState);
+
                 if (!newState || !newState.config) {
                     console.log('No state data yet or invalid state structure');
                     return;
@@ -1504,43 +1676,16 @@
                     document.getElementById('finishWindow').value = FINISH_WINDOW_MIN.toString();
                     document.getElementById('autoReschedule').value = AUTO_RESCHEDULE_MIN;
 
-                    // #region agent log
-                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1485',message:'Firebase listener: received lines from Firebase',data:{linesFromFirebase:newState.config.lines.map(l=>({id:l.id,name:l.name}))},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                    // #endregion
-                    
-                    // Update lineConfigs and scheduledTimes
-                    const newLines = newState.config.lines.map((line) => ({
-                        id: line.id,
-                        name: line.name,
-                        time: line.time || '',
-                        people: line.people || [],
-                        waitQueue: line.waitQueue || []  // Now includes per-line wait queues!
-                    }));
-
-                    // #region agent log
-                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1492',message:'Firebase listener: newLines mapped',data:{newLines:newLines.map(l=>({id:l.id,name:l.name})),lineOrderBefore:lineOrder},timestamp:Date.now(),hypothesisId:'H2,H3'})}).catch(()=>{});
-                    // #endregion
-
-                    // If this is the first load, or if lines were added/removed, update lineOrder
-                    if (
-                        lineOrder.length === 0 ||
-                        newLines.length !== lineOrder.length ||
-                        !lineOrder.every(id => newLines.some(line => line.id === id))
-                    ) {
-                        lineOrder = newLines.map(line => line.id);
-                    }
-                    
-                    // Always reorder newLines to match lineOrder
-                    lineConfigs = lineOrder.map(id => newLines.find(line => line.id === id)).filter(Boolean);
-                    
-                    // #region agent log
-                    fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1504',message:'Firebase listener: lineConfigs updated',data:{lineConfigs:lineConfigs.map(l=>({id:l.id,name:l.name})),lineOrderAfter:lineOrder},timestamp:Date.now(),hypothesisId:'H2,H3'})}).catch(()=>{});
-                    // #endregion
-
-                    // Update general wait queue
-                    generalWaitQueue = newState.config.generalWaitQueue || [];
+                    // Parse the keyed (or legacy) structure into local arrays.
+                    // Each line/person carries its Firebase child key as `id`, so later mutations
+                    // can write to that exact child path instead of the whole tree.
+                    lineConfigs = linesToArray(newState.config.lines);
+                    generalWaitQueue = entriesToArray(newState.config.generalWaitQueue);
+                    lineOrder = lineConfigs.map(line => line.id);
 
                     // Update scheduledTimes based on lineConfigs
+                    const activeIds = new Set(lineConfigs.map(c => c.id));
+                    Object.keys(scheduledTimes).forEach(id => { if (!activeIds.has(id)) delete scheduledTimes[id]; });
                     lineConfigs.forEach(config => {
                         if (config.time) {
                             scheduledTimes[config.id] = parseTime(config.time);
@@ -1549,11 +1694,16 @@
                         }
                     });
 
+                    // One-time migration of old array-shaped data to keyed objects.
+                    if (isLegacyShape(newState.config)) {
+                        migrateToKeyed();
+                    }
+
                     // Update UI elements
                     updateUIFromState(newState.config);
                     // Update wait queue indicator
                     updateWaitQueueIndicator();
-                    // Force timer update
+                    // Rebuild timer DOM (the single global tick loop keeps them running)
                     updateTimers();
 
                     console.log('State update processed successfully');
@@ -1562,7 +1712,6 @@
                 }
             }, (error) => {
                 console.error('Firebase listener error:', error);
-                alert('Lost connection to database. Please refresh the page.');
             });
         }
 
@@ -1604,11 +1753,11 @@
                             <input type="text" 
                                    class="line-name"
                                    value="${config.name}" 
-                                   onchange="updateLineName(${config.id}, this.value)"
+                                   onchange="updateLineName('${config.id}', this.value)"
                                    placeholder="Line name"
                                    ${currentRole !== 'admin' ? 'disabled' : ''}>
                             <select id="time${config.id}" 
-                                    onchange="updateLineTime(${config.id})"
+                                    onchange="updateLineTime('${config.id}')"
                                     required 
                                     ${currentRole !== 'admin' ? 'disabled' : ''}>
                                 <option value="" disabled selected>Select time...</option>
@@ -1626,7 +1775,7 @@
                             <div class="people-count">
                                 <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
                                 ${currentRole !== 'viewer' ? `
-                                    <button type="button" onclick="clearPeople(${config.id})" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                    <button type="button" onclick="clearPeople('${config.id}')" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
                                 ` : ''}
                             </div>
                             <div class="people-list">
@@ -1636,7 +1785,7 @@
                                         <span class="person-order">${index + 1}.</span>
                                         <span>${person.name}</span>
                                         ${currentRole !== 'viewer' ? `
-                                            <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                            <button type="button" onclick="removePerson('${config.id}', '${person.id}')">×</button>
                                         ` : ''}
                                     </div>
                                 `).join('')
@@ -1648,14 +1797,14 @@
                                     <input type="text" 
                                            id="newPerson${config.id}" 
                                            placeholder="Add person's name"
-                                           onkeypress="handlePersonInput(event, ${config.id})">
-                                    <button type="button" onclick="addPerson(${config.id})">Add</button>
+                                           onkeypress="handlePersonInput(event, '${config.id}')">
+                                    <button type="button" onclick="addPerson('${config.id}')">Add</button>
                                 </div>
                             ` : ''}
                         </div>
                         ${currentRole === 'admin' ? `
                             <div class="line-buttons">
-                                <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
+                                <button type="button" onclick="removeLineConfig('${config.id}')">Remove Line</button>
                             </div>
                         ` : ''}
                     `;
@@ -1699,88 +1848,27 @@
         });
 
         function addLineConfig() {
-            // #region agent log
-            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1667',message:'addLineConfig: before adding line',data:{lineConfigsLength:lineConfigs.length,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-            // #endregion
-            
-            // Find the highest existing line number
+            if (currentRole !== 'admin') return;
+
+            // Find the highest existing line number for a friendly default name
             const existingNumbers = lineConfigs.map(config => {
-                const match = config.name.match(/Line (\d+)/);
+                const match = (config.name || '').match(/Line (\d+)/);
                 return match ? parseInt(match[1]) : 0;
             });
             const nextNumber = Math.max(0, ...existingNumbers) + 1;
+            const nextOrder = lineConfigs.reduce((m, c) => Math.max(m, (typeof c.order === 'number' ? c.order : 0)), -1) + 1;
 
-            const lineId = lineConfigs.length + 1;
-            const lineConfig = {
-                id: lineId,
-                name: `Line ${nextNumber}`,
-                time: '',
-                people: []
-            };
-            lineConfigs.push(lineConfig);
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1682',message:'addLineConfig: after adding line',data:{newLineId:lineId,lineConfigsLength:lineConfigs.length,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-            // #endregion
-            
-            updateLineConfigs();
-            updateTimers(); // Update timers immediately to show the new line
-
-            // Save state without version to prevent conflicts
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                    lines: lineConfigs.map(config => ({
-                        id: config.id,  // FIX: Include id field
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    })),
-                    generalWaitQueue: generalWaitQueue
-                }
-            };
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1705',message:'addLineConfig: state built for saving',data:{linesInState:state.config.lines.map(l=>({id:l.id,name:l.name}))},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
-            // #endregion
-            
-            saveState(state);
+            // Client-generated unique key (never collides across devices, unlike length+1).
+            const lineId = newId();
+            // Granular write: create only this line node. Other devices' lines are untouched.
+            lineRef(lineId).set({ name: `Line ${nextNumber}`, time: '', order: nextOrder }).catch(handleWriteError);
+            // UI updates arrive via the Firebase listener.
         }
 
         function removeLineConfig(lineId) {
-            lineConfigs = lineConfigs.filter(config => config.id !== lineId);
-            updateLineConfigs();
-
-            // Save state without version to prevent conflicts
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                    lines: lineConfigs.map(config => ({
-                        id: config.id,  // FIX: Include id field
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    })),
-                    generalWaitQueue: generalWaitQueue
-                }
-            };
-            saveState(state);
+            if (currentRole !== 'admin') return;
+            // Granular delete of just this line node.
+            lineRef(lineId).remove().catch(handleWriteError);
         }
 
         function updateLineConfigs() {
@@ -1791,11 +1879,11 @@
                         <input type="text" 
                                class="line-name"
                                value="${config.name}" 
-                               onchange="updateLineName(${config.id}, this.value)"
+                               onchange="updateLineName('${config.id}', this.value)"
                                placeholder="Line name"
                                ${currentRole !== 'admin' ? 'disabled' : ''}>
                         <select id="time${config.id}" 
-                                onchange="updateLineTime(${config.id})"
+                                onchange="updateLineTime('${config.id}')"
                                 required 
                                 ${currentRole !== 'admin' ? 'disabled' : ''}>
                             <option value="" disabled selected>Select time...</option>
@@ -1813,7 +1901,7 @@
                         <div class="people-count">
                             <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
                             ${currentRole !== 'viewer' ? `
-                                <button type="button" onclick="clearPeople(${config.id})" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                <button type="button" onclick="clearPeople('${config.id}')" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
                             ` : ''}
                         </div>
                         <div class="people-list">
@@ -1823,7 +1911,7 @@
                                         <span class="person-order">${index + 1}.</span>
                                         <span>${person.name}</span>
                                         ${currentRole !== 'viewer' ? `
-                                            <button type="button" onclick="removePerson(${config.id}, ${person.id})">×</button>
+                                            <button type="button" onclick="removePerson('${config.id}', '${person.id}')">×</button>
                                         ` : ''}
                                     </div>
                                 `).join('')
@@ -1835,14 +1923,14 @@
                                 <input type="text" 
                                        id="newPerson${config.id}" 
                                        placeholder="Add person's name"
-                                       onkeypress="handlePersonInput(event, ${config.id})">
-                                <button type="button" onclick="addPerson(${config.id})">Add</button>
+                                       onkeypress="handlePersonInput(event, '${config.id}')">
+                                <button type="button" onclick="addPerson('${config.id}')">Add</button>
                             </div>
                         ` : ''}
                     </div>
                     ${currentRole === 'admin' ? `
                         <div class="line-buttons">
-                            <button type="button" onclick="removeLineConfig(${config.id})">Remove Line</button>
+                            <button type="button" onclick="removeLineConfig('${config.id}')">Remove Line</button>
                         </div>
                     ` : ''}
                 </div>
@@ -1850,67 +1938,25 @@
         }
 
         function updateLineName(lineId, name) {
+            if (currentRole !== 'admin') return;
             const config = lineConfigs.find(c => c.id === lineId);
-            if (config) {
-                config.name = name || `Line ${lineId}`; // Ensure there's always a name
-                updateTimers(); // Update timers when name changes
-
-                // Save state without version to prevent conflicts
-                const state = {
-                    timestamp: Date.now() / 1000,
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        })),
-                        generalWaitQueue: generalWaitQueue
-                    }
-                };
-                saveState(state);
-            }
+            if (!config) return;
+            const newName = name || config.name || 'Line';
+            config.name = newName;
+            // Granular write: only this line's name.
+            lineRef(lineId).update({ name: newName }).catch(handleWriteError);
         }
 
         function updateLineTime(lineId) {
+            if (currentRole !== 'admin') return;
             const config = lineConfigs.find(c => c.id === lineId);
-            if (config) {
-                const timeSelect = document.getElementById(`time${lineId}`);
-                scheduledTimes[lineId] = parseTime(timeSelect.value);
-                config.time = timeSelect.value;
-                updateTimers();
-
-                // Save state without version to prevent conflicts
-                const state = {
-                    timestamp: Date.now() / 1000,
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        })),
-                        generalWaitQueue: generalWaitQueue
-                    }
-                };
-                saveState(state);
-            }
+            if (!config) return;
+            const timeSelect = document.getElementById(`time${lineId}`);
+            if (!timeSelect) return;
+            scheduledTimes[lineId] = parseTime(timeSelect.value);
+            config.time = timeSelect.value;
+            // Granular write: only this line's time.
+            lineRef(lineId).update({ time: timeSelect.value }).catch(handleWriteError);
         }
 
         function pad(n) { return n.toString().padStart(2, '0'); }
@@ -1946,24 +1992,31 @@
 
         document.getElementById('scheduleForm').addEventListener('submit', function (e) {
             e.preventDefault();
-            updateTimingSettings();
-            scheduledTimes = {};
+            updateTimingSettings(); // granular config-scalar write
 
+            // Write each line's chosen time to its own child path (multi-path update = atomic,
+            // and does not clobber people/waitQueue on those lines).
+            const updates = {};
             lineConfigs.forEach(config => {
                 const timeSelect = document.getElementById(`time${config.id}`);
+                if (!timeSelect || !timeSelect.value) return;
                 scheduledTimes[config.id] = parseTime(timeSelect.value);
                 config.time = timeSelect.value;
+                updates['config/lines/' + config.id + '/time'] = timeSelect.value;
             });
+            if (currentRole !== 'viewer' && Object.keys(updates).length) {
+                stateRef.update(updates).catch(handleWriteError);
+            }
 
             updateTimers();
             toggleConfig();
-            saveState();
         });
 
-        function showChangeSeatNotification() {
-            // Check if alarms are enabled from the toggle
+        function showChangeSeatNotification(force = false) {
+            // Check if alarms are enabled from the toggle (the manual button passes force=true to
+            // bypass it, matching the documented "works regardless of the toggle" behaviour).
             const alarmToggle = document.getElementById('alarmToggle');
-            if (!alarmToggle.checked) return;
+            if (!force && alarmToggle && !alarmToggle.checked) return;
 
             const notification = document.getElementById('changeSeatNotification');
             const overlay = document.getElementById('notificationOverlay');
@@ -2033,14 +2086,17 @@
         }
 
         function playAlarmManually() {
-            // Manually trigger the alarm notification and sound
-            // This works regardless of the alarm toggle state (for testing purposes)
+            // Manually trigger the alarm notification and sound.
+            // Passes force=true so it plays regardless of the alarm toggle state.
             console.log('Manual alarm triggered');
-            showChangeSeatNotification();
+            showChangeSeatNotification(true);
         }
 
+        // updateTimers() now ONLY rebuilds the timer DOM structure. The ticking (countdowns +
+        // alarms) is driven by a single global loop below, so re-rendering never resets alarm state
+        // and no per-timer intervals leak (the old code created a fresh setInterval on every call
+        // and never cleared them, which both starved the main thread and swallowed alarms).
         function updateTimers() {
-            // Create timer containers without individual wait queues
             const timerHTML = lineConfigs.map((config, index) => `
                 <div class="timer-container" data-line="${config.id}" style="order: ${index};">
                     <div class="timer" data-line="${config.id}">
@@ -2068,261 +2124,172 @@
             `).join('');
 
             document.getElementById('timers-container').innerHTML = timerHTML;
+            startGlobalTick();
+            globalTick(); // paint immediately so counts aren't blank until the next tick
+            updateNextLineInfo();
+        }
 
-            document.querySelectorAll('.timer').forEach(timer => {
-                const line = timer.dataset.line;
-                let lastBellTime = null;
-                const label = timer.querySelector('.label');
-                const countElement = timer.querySelector('.count');
-                const timerContainer = timer.closest('.timer-container');
+        // Persistent per-line alarm state (survives re-renders — THIS is the alarm-reliability fix).
+        const alarmFired = {};   // lineId -> last interval index we already rang for
+        const warned30 = {};     // lineId -> upcoming interval index we already 30s-warned for
+        let _globalTickStarted = false;
+        let _globalTickId = null;
 
-                function update() {
-                    if (!scheduledTimes[line]) return;
+        function startGlobalTick() {
+            if (_globalTickStarted) return;
+            _globalTickStarted = true;
+            _globalTickId = setInterval(globalTick, 200);
+        }
 
-                    const now = Date.now();
-                    const startT = scheduledTimes[line];
-                    let remaining, status;
+        function tickOneLine(config) {
+            const line = config.id;
+            let timer = null;
+            try { timer = document.querySelector('.timer[data-line="' + CSS.escape(line) + '"]'); } catch (e) { timer = null; }
+            if (!timer) return;
+            const countElement = timer.querySelector('.count');
+            if (!countElement) return;
 
-                    if (now < startT) {
-                        const timeUntilStart = startT - now;
-                        const minutesUntilStart = Math.floor(timeUntilStart / 60000);
-                        const displayMinutes = minutesUntilStart < 1 ? "< 1" : minutesUntilStart;
-                        countElement.innerHTML = `Starting in ${displayMinutes} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
-                        countElement.classList.add('starting-text');
-                        timer.classList.remove('finish-window');
+            const startT = scheduledTimes[line];
+            if (!startT) {
+                // Not scheduled: clear any alarm state so a future schedule starts clean.
+                alarmFired[line] = undefined;
+                warned30[line] = undefined;
+                return;
+            }
 
-                        // Add blinking effect if within blink time
-                        if (timeUntilStart <= BLINK_TIME_MIN * 60000) {
-                            timer.classList.add('blinking');
+            const now = Date.now();
+            let status;
+
+            if (now < startT) {
+                // Waiting to start (or rescheduled to the future): reset alarm baseline.
+                alarmFired[line] = undefined;
+                warned30[line] = undefined;
+                const timeUntilStart = startT - now;
+                const minutesUntilStart = Math.floor(timeUntilStart / 60000);
+                const displayMinutes = minutesUntilStart < 1 ? "< 1" : minutesUntilStart;
+                countElement.innerHTML = `Starting in ${displayMinutes} min<br><span class="scheduled-time">${formatTime(new Date(startT))}</span>`;
+                countElement.classList.add('starting-text');
+                timer.classList.remove('finish-window');
+                if (timeUntilStart <= BLINK_TIME_MIN * 60000) timer.classList.add('blinking');
+                else timer.classList.remove('blinking');
+                status = 'inactive';
+            } else {
+                countElement.classList.remove('starting-text');
+                timer.classList.remove('blinking');
+                const elapsed = now - startT;
+
+                if (elapsed >= TOTAL_SESSION_TIME) {
+                    countElement.textContent = "00:00";
+                    timer.classList.remove('finish-window');
+                    status = 'inactive';
+                    alarmFired[line] = undefined;
+                    warned30[line] = undefined;
+
+                    // Auto-reschedule (writers only — viewers must never write).
+                    if (currentRole !== 'viewer') {
+                        const autoRescheduleValue = document.getElementById('autoReschedule').value;
+                        if (autoRescheduleValue !== 'off') {
+                            const nextStart = getNextFiveMinuteSlot(Date.now(), parseInt(autoRescheduleValue));
+                            const newTimeStr = formatTime(new Date(nextStart));
+                            scheduledTimes[line] = nextStart; // synchronous -> only one write fires
+                            config.time = newTimeStr;
+                            const timeSelect = document.getElementById(`time${line}`);
+                            if (timeSelect) timeSelect.value = newTimeStr;
+                            lineRef(line).update({ time: newTimeStr }).catch(handleWriteError);
                         } else {
-                            timer.classList.remove('blinking');
-                        }
-
-                        status = 'inactive';
-                    } else {
-                        countElement.classList.remove('starting-text');
-                        timer.classList.remove('blinking');
-                        const elapsed = now - startT;
-
-                        // Reset auto reschedule flag logic removed
-
-                        if (elapsed >= TOTAL_SESSION_TIME) {
-                            countElement.textContent = "00:00";
-                            timer.classList.remove('finish-window');
-                            status = 'inactive';
-
-                            // Check auto reschedule setting
-                            const autoRescheduleValue = document.getElementById('autoReschedule').value;
-                            const config = lineConfigs.find(c => c.id === parseInt(line));
-                            if (autoRescheduleValue !== 'off') {
-                                // Reschedule timer for now + autoRescheduleValue minutes, rounded to next 5-min slot
-                                const nextStart = getNextFiveMinuteSlot(Date.now(), parseInt(autoRescheduleValue));
-                                scheduledTimes[line] = nextStart;
-                                if (config) {
-                                    config.time = formatTime(new Date(nextStart));
-                                    // Update the time select element
-                                    const timeSelect = document.getElementById(`time${config.id}`);
-                                    if (timeSelect) {
-                                        timeSelect.value = config.time;
-                                    }
-                                }
-                            } else {
-                                // Clear scheduled time and line configuration
-                                delete scheduledTimes[line];
-                                if (config) {
-                                    config.time = '';
-                                    // Update the time select element
-                                    const timeSelect = document.getElementById(`time${config.id}`);
-                                    if (timeSelect) {
-                                        timeSelect.value = '';
-                                    }
-                                }
-                            }
-
-                            // Save state after all updates
-                            saveState();
-                        } else {
-                            remaining = TOTAL_SESSION_TIME - elapsed;
-                            const mm = Math.floor(remaining / 60000);
-                            const ss = Math.floor((remaining % 60000) / 1000);
-                            // Check finish window
-                            if (remaining <= FINISH_WINDOW_MIN * 60000) {
-                                countElement.textContent = "This line's time is over";
-                                countElement.classList.add('lounge-text');
-                                timer.classList.add('finish-window');
-                            } else {
-                                countElement.textContent = `${pad(mm)}:${pad(ss)}`;
-                                countElement.classList.remove('lounge-text');
-                                timer.classList.remove('finish-window');
-                            }
-                            status = 'active';
-
-                            // Only trigger alarm if the timer is actually running and we've passed an interval
-                            if (status === 'active') {
-                                const currentInterval = Math.floor(elapsed / MS5);
-                                if (lastBellTime === null) {
-                                    lastBellTime = currentInterval;
-                                } else if (currentInterval > lastBellTime) {
-                                    // Only play alarm if we're not in the middle of updating UI or settings
-                                    if (!isUpdatingUI && !window.isUpdatingSettings) {
-                                        showChangeSeatNotification();
-                                    }
-                                    lastBellTime = currentInterval;
-                                }
-
-                                // Check for 30-second alarm (30 seconds before main alarm)
-                                const timeUntilNextAlarm = MS5 - (elapsed % MS5);
-                                if (timeUntilNextAlarm <= 30000 && timeUntilNextAlarm > 29800) { // 30 seconds ± 200ms tolerance
-                                    // Only play 30-second alarm if we're not in the middle of updating UI or settings
-                                    if (!isUpdatingUI && !window.isUpdatingSettings) {
-                                        showThirtySecondAlarm();
-                                    }
-                                }
-                            }
+                            delete scheduledTimes[line];
+                            config.time = '';
+                            const timeSelect = document.getElementById(`time${line}`);
+                            if (timeSelect) timeSelect.value = '';
+                            lineRef(line).update({ time: '' }).catch(handleWriteError);
                         }
                     }
-                    timer.classList.toggle('active', status === 'active');
-                    timer.classList.toggle('inactive', status === 'inactive');
-                }
-                setInterval(update, 200);
-                update();
-            });
+                } else {
+                    const remaining = TOTAL_SESSION_TIME - elapsed;
+                    const mm = Math.floor(remaining / 60000);
+                    const ss = Math.floor((remaining % 60000) / 1000);
+                    if (remaining <= FINISH_WINDOW_MIN * 60000) {
+                        countElement.textContent = "This line's time is over";
+                        countElement.classList.add('lounge-text');
+                        timer.classList.add('finish-window');
+                    } else {
+                        countElement.textContent = `${pad(mm)}:${pad(ss)}`;
+                        countElement.classList.remove('lounge-text');
+                        timer.classList.remove('finish-window');
+                    }
+                    status = 'active';
 
-            // Update next line information when timers are updated
-            updateNextLineInfo();
+                    const currentInterval = Math.floor(elapsed / MS5);
+                    // Baseline on first observation so we don't ring for interval 0 or past intervals.
+                    if (alarmFired[line] === undefined) {
+                        alarmFired[line] = currentInterval;
+                    } else if (currentInterval > alarmFired[line]) {
+                        // Rings on every open client (each venue screen). No isUpdatingUI guard, and
+                        // we never advance without ringing, so churn can no longer swallow an alarm.
+                        showChangeSeatNotification();
+                        alarmFired[line] = currentInterval;
+                    }
+
+                    // 30-second warning: fire once for the upcoming interval when it is <=30s away.
+                    // Robust to jitter/background throttling (no fragile 200ms window).
+                    const timeUntilNextAlarm = MS5 - (elapsed % MS5);
+                    if (timeUntilNextAlarm <= 30000) {
+                        const upcoming = currentInterval + 1;
+                        if (warned30[line] !== upcoming) {
+                            warned30[line] = upcoming;
+                            showThirtySecondAlarm();
+                        }
+                    }
+                }
+            }
+            timer.classList.toggle('active', status === 'active');
+            timer.classList.toggle('inactive', status === 'inactive');
+        }
+
+        function globalTick() {
+            for (let i = 0; i < lineConfigs.length; i++) {
+                try { tickOneLine(lineConfigs[i]); } catch (e) { console.error('tick error:', e); }
+            }
         }
 
         function addPerson(lineId) {
             if (currentRole === 'viewer') return;
 
-            isUpdatingUI = true;  // Set flag before UI update
             const config = lineConfigs.find(c => c.id === lineId);
             if (!config) return;
 
             const input = document.getElementById(`newPerson${lineId}`);
             const name = input.value.trim();
+            if (!name) return;
 
-            if (name && (!config.people || config.people.length < MAX_PEOPLE_PER_LINE)) {
-                if (!config.people) config.people = [];
-                config.people.push({
-                    id: Date.now(),
-                    name: name
-                });
-                input.value = '';
-                updateLineConfigs();
-                updateTimers();
-
-                // Save state without version to prevent conflicts
-                const state = {
-                    timestamp: Date.now() / 1000,
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        })),
-                        generalWaitQueue: generalWaitQueue
-                    }
-                };
-                saveState(state);
-            } else if (name && config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
+            // Best-effort capacity guard (soft UI limit). We deliberately DO NOT use a transaction:
+            // transactions are unreliable across offline/reconnect, and losing a logged person is far
+            // worse than very occasionally exceeding the cap by one under simultaneous adds.
+            if (config.people && config.people.length >= MAX_PEOPLE_PER_LINE) {
                 alert(`Maximum number of people (${MAX_PEOPLE_PER_LINE}) reached for this line`);
+                return;
             }
+            const personId = newId();
+            // Granular write to a UNIQUE key: never clobbers a concurrent add, and RTDB caches it
+            // while offline and flushes it on reconnect.
+            lineRef(lineId).child('people/' + personId).set({ name: name, ts: Date.now() }).catch(handleWriteError);
 
-            // Reset flag after a short delay
-            setTimeout(() => {
-                isUpdatingUI = false;
-            }, 1000);
+            input.value = '';
+            // UI updates arrive via the Firebase listener.
         }
 
         function removePerson(lineId, personId) {
             if (currentRole === 'viewer') return;
-
-            isUpdatingUI = true;  // Set flag before UI update
             const config = lineConfigs.find(c => c.id === lineId);
-            if (!config || !config.people) return;
-
-            config.people = config.people.filter(p => p.id !== personId);
-            updateLineConfigs();
-            updateTimers();
-
-            // Save state without version to prevent conflicts
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                    lines: lineConfigs.map(config => ({
-                        id: config.id,
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    })),
-                    generalWaitQueue: generalWaitQueue
-                }
-            };
-            saveState(state);
-
-            // Reset flag after a short delay
-            setTimeout(() => {
-                isUpdatingUI = false;
-            }, 1000);
+            if (!config) return;
+            // Granular delete of exactly this person by key — never touches other entries.
+            lineRef(lineId).child('people/' + personId).remove().catch(handleWriteError);
         }
 
         function clearPeople(lineId) {
             if (currentRole === 'viewer') return;
-
             if (confirm('Are you sure you want to clear all people from this line?')) {
-                isUpdatingUI = true;  // Set flag before UI update
-                const config = lineConfigs.find(c => c.id === lineId);
-                if (!config) return;
-
-                config.people = [];
-                updateLineConfigs();
-                updateTimers();
-
-                // Save state without version to prevent conflicts
-                const state = {
-                    timestamp: Date.now() / 1000,
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        })),
-                        generalWaitQueue: generalWaitQueue
-                    }
-                };
-                saveState(state);
-
-                // Reset flag after a short delay
-                setTimeout(() => {
-                    isUpdatingUI = false;
-                }, 1000);
+                lineRef(lineId).child('people').remove().catch(handleWriteError);
             }
         }
 
@@ -2336,180 +2303,51 @@
         // Wait Queue Management Functions
         function addToWaitQueue(lineId) {
             if (currentRole === 'viewer') return;
-
-            isUpdatingUI = true;  // Set flag before UI update
             const config = lineConfigs.find(c => c.id === lineId);
             if (!config) return;
 
             const input = document.getElementById(`newWaitQueuePerson${lineId}`);
             const name = input.value.trim();
+            if (!name) return;
 
-            if (name) {
-                if (!config.waitQueue) config.waitQueue = [];
-                config.waitQueue.push({
-                    id: Date.now(),
-                    name: name
-                });
-                input.value = '';
-                updateLineConfigs();
-                updateTimers();
-
-                // Save state without version to prevent conflicts
-                const state = {
-                    timestamp: Date.now() / 1000,
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        }))
-                    }
-                };
-                saveState(state);
-            }
-
-            // Reset flag after a short delay
-            setTimeout(() => {
-                isUpdatingUI = false;
-            }, 1000);
+            const personId = newId();
+            // Granular write: only this line's waitQueue subtree (never touches the general queue).
+            lineRef(lineId).child('waitQueue/' + personId).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            input.value = '';
         }
 
         function removeFromWaitQueue(lineId, personId) {
             if (currentRole === 'viewer') return;
-
-            isUpdatingUI = true;  // Set flag before UI update
-            const config = lineConfigs.find(c => c.id === lineId);
-            if (!config || !config.waitQueue) return;
-
-            config.waitQueue = config.waitQueue.filter(p => p.id !== personId);
-            updateLineConfigs();
-            updateTimers();
-
-            // Save state without version to prevent conflicts
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                    lines: lineConfigs.map(config => ({
-                        id: config.id,
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    }))
-                }
-            };
-            saveState(state);
-
-            // Reset flag after a short delay
-            setTimeout(() => {
-                isUpdatingUI = false;
-            }, 1000);
+            lineRef(lineId).child('waitQueue/' + personId).remove().catch(handleWriteError);
         }
 
         function clearWaitQueue(lineId) {
             if (currentRole === 'viewer') return;
-
             if (confirm('Are you sure you want to clear the entire wait queue?')) {
-                isUpdatingUI = true;  // Set flag before UI update
-                const config = lineConfigs.find(c => c.id === lineId);
-                if (!config) return;
-
-                config.waitQueue = [];
-                updateLineConfigs();
-                updateTimers();
-
-                // Save state without version to prevent conflicts
-                const state = {
-                    timestamp: Date.now() / 1000,
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        }))
-                    }
-                };
-                saveState(state);
-
-                // Reset flag after a short delay
-                setTimeout(() => {
-                    isUpdatingUI = false;
-                }, 1000);
+                lineRef(lineId).child('waitQueue').remove().catch(handleWriteError);
             }
         }
 
         function promoteFromWaitQueue(lineId) {
             if (currentRole === 'viewer') return;
-
-            isUpdatingUI = true;  // Set flag before UI update
             const config = lineConfigs.find(c => c.id === lineId);
             if (!config || !config.waitQueue || config.waitQueue.length === 0) return;
 
-            // Clear current people in the line
-            config.people = [];
-
-            // Move people from wait queue to line (up to the limit)
+            // Move up to capacity from this line's wait queue into its people list, atomically:
+            // one multi-path update rewrites only this line's people + waitQueue subtrees.
             const peopleToPromote = Math.min(config.waitQueue.length, MAX_PEOPLE_PER_LINE);
-            const promotedPeople = config.waitQueue.slice(0, peopleToPromote);
-            const remainingInQueue = config.waitQueue.slice(peopleToPromote);
+            const promoted = config.waitQueue.slice(0, peopleToPromote);
+            const remaining = config.waitQueue.slice(peopleToPromote);
 
-            config.people = promotedPeople;
-            config.waitQueue = remainingInQueue;
+            const peopleObj = {};
+            promoted.forEach((p, i) => { peopleObj[newId()] = { name: p.name, ts: Date.now() + i }; });
+            const wqObj = {};
+            remaining.forEach((p, i) => { wqObj[newId()] = { name: p.name, ts: Date.now() + i }; });
 
-            updateLineConfigs();
-            updateTimers();
-
-            // Save state without version to prevent conflicts
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                    lines: lineConfigs.map(config => ({
-                        id: config.id,
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    }))
-                }
-            };
-            saveState(state);
-
-            // Reset flag after a short delay
-            setTimeout(() => {
-                isUpdatingUI = false;
-            }, 1000);
+            lineRef(lineId).update({
+                people: Object.keys(peopleObj).length ? peopleObj : null,
+                waitQueue: Object.keys(wqObj).length ? wqObj : null
+            }).catch(handleWriteError);
         }
 
         function handleWaitQueueInput(event, lineId) {
@@ -2532,26 +2370,26 @@
 
         document.getElementById('finishWindow').addEventListener('change', function () {
             FINISH_WINDOW_MIN = parseInt(this.value);
-            saveState();
+            writeConfigScalars();
             updateTimers();
         });
 
         document.getElementById('maxPeople').addEventListener('change', function () {
             MAX_PEOPLE_PER_LINE = parseInt(this.value);
-            saveState();
+            writeConfigScalars();
             updateLineConfigs();
             updateTimers();
         });
 
         document.getElementById('blinkTime').addEventListener('change', function () {
             BLINK_TIME_MIN = parseInt(this.value);
-            saveState();
+            writeConfigScalars();
             updateTimers();
         });
 
         document.getElementById('autoReschedule').addEventListener('change', function () {
             AUTO_RESCHEDULE_MIN = this.value;
-            saveState();
+            writeConfigScalars();
         });
 
         // Function to get role from URL parameters
@@ -2668,75 +2506,46 @@
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
             MS5 = alarmMinutes * 60 * 1000;
 
-            // Create state update without version to prevent conflicts
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: sessionMinutes.toString(),
-                    alarmInterval: alarmMinutes.toString(),
-                    maxPeoplePerLine: MAX_PEOPLE_PER_LINE.toString(),
-                    blinkBeforeStart: document.getElementById('blinkBeforeStart')?.checked || false,
-                    blinkTime: BLINK_TIME_MIN.toString(),
-                    finishWindow: FINISH_WINDOW_MIN.toString(),
-                    autoReschedule: AUTO_RESCHEDULE_MIN,
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []
-                        })),
-                    generalWaitQueue: generalWaitQueue
-                }
-            };
-
-            // Save state immediately
-            saveState(state);
+            // Granular write of just the scalar config fields (never touches lines/queues).
+            writeConfigScalars();
         }
 
-        // Firebase-based saveState function
+        // Debounced write of the scalar config fields so typing/spinner clicks don't fire a write
+        // per keystroke. Writes ONLY config scalars — lines, people and queues are left untouched.
+        let _configWriteTimer = null;
+        function writeConfigScalars() {
+            if (currentRole === 'viewer' || !stateRef) return;
+            if (_configWriteTimer) clearTimeout(_configWriteTimer);
+            _configWriteTimer = setTimeout(() => {
+                _configWriteTimer = null;
+                stateRef.child('config').update(currentScalars()).catch(handleWriteError);
+            }, 400);
+        }
+
+        // Full-tree writer in KEYED form. Only used for seeding/reset now — every normal mutation
+        // writes a granular child path instead (see the write helpers above).
         async function saveState(stateToSave = null) {
+            if (currentRole === 'viewer' || !stateRef) return;
             try {
-                // #region agent log
-                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2624',message:'saveState: called',data:{hasPrebuiltState:!!stateToSave,lineConfigsIds:lineConfigs.map(c=>c.id)},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
-                // #endregion
-                
-                const state = stateToSave || {
-                    timestamp: Date.now(),
-                    config: {
-                        sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                        alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                        maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                        blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                        blinkTime: document.getElementById("blinkTime")?.value || "5",
-                        finishWindow: document.getElementById("finishWindow")?.value || "5",
-                        autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                        lines: lineConfigs.map(config => ({
-                            id: config.id,
-                            name: config.name,
-                            time: config.time || '',
-                            people: config.people || [],
-                            waitQueue: config.waitQueue || []  // Now properly persisted
-                        })),
-                        generalWaitQueue: generalWaitQueue
-                    }
-                };
-
-                // #region agent log
-                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2645',message:'saveState: about to save to Firebase',data:{linesInState:state.config.lines.map(l=>({id:l.id,name:l.name,hasUndefinedId:l.id===undefined}))},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
-                // #endregion
-
-                console.log('Saving state to Firebase:', state);
+                let state = stateToSave;
+                if (!state) {
+                    const linesObj = {};
+                    lineConfigs.forEach((c, i) => {
+                        let k = c.id;
+                        if (k == null || isNumericKey(k) || String(k).startsWith('legacy-')) k = newId();
+                        linesObj[k] = { name: c.name || ('Line ' + (i + 1)), time: c.time || '', order: (typeof c.order === 'number') ? c.order : i };
+                        const people = toKeyedEntries(c.people);
+                        if (Object.keys(people).length) linesObj[k].people = people;
+                        const wq = toKeyedEntries(c.waitQueue);
+                        if (Object.keys(wq).length) linesObj[k].waitQueue = wq;
+                    });
+                    state = { timestamp: Date.now(), config: Object.assign(currentScalars(), { lines: linesObj }) };
+                    const gwq = toKeyedEntries(generalWaitQueue);
+                    if (Object.keys(gwq).length) state.config.generalWaitQueue = gwq;
+                }
                 await stateRef.set(state);
-                console.log('State saved successfully to Firebase');
             } catch (error) {
                 console.error("Error saving state to Firebase:", error);
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7246/ingest/bd7c42ab-81ba-4ddd-885e-d001d2033caf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:2653',message:'saveState: error caught',data:{errorMessage:error.message,errorStack:error.stack},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-                // #endregion
-                
-                alert("Failed to save changes. Please check your connection and try again.");
             }
         }
 
@@ -2832,108 +2641,86 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <div style="position: relative;">
-                            <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown(${person.id})">Move</button>
+                            <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown('${person.id}')">Move</button>
                             <div id="moveDropdown${person.id}" style="display: none; position: absolute; right: 0; background: white; border: 1px solid #ff97d7; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem; min-width: 100px;">
                                 ${lineConfigs.map(line => `
-                                    <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine(${person.id}, ${line.id}); toggleMoveDropdown(${person.id})">${line.name}</button>
+                                    <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine('${person.id}', '${line.id}'); toggleMoveDropdown('${person.id}')">${line.name}</button>
                                 `).join('')}
                             </div>
                         </div>
-                        <button type="button" style="color: #8f0057; font-size: 1.2rem; background: none; border: none; cursor: pointer;" onclick="removeFromGeneralWaitQueue(${person.id})">×</button>
+                        <button type="button" style="color: #8f0057; font-size: 1.2rem; background: none; border: none; cursor: pointer;" onclick="removeFromGeneralWaitQueue('${person.id}')">×</button>
                     </div>
                 `;
                 list.appendChild(entry);
             });
             // Bulk promote buttons
             bulkPromote.innerHTML = lineConfigs.map(line => `
-                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine(${line.id})">Promote to ${line.name}</button>
+                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine('${line.id}')">Promote to ${line.name}</button>
             `).join('');
         }
 
-        // Add person to general wait queue
+        function generalQueueRef() { return stateRef.child('config/generalWaitQueue'); }
+
+        // Add person to general wait queue (granular write to a single new key)
         function addGeneralWaitQueuePerson() {
+            if (currentRole === 'viewer') return;
             const input = document.getElementById('newGeneralWaitQueuePerson');
             const name = input.value.trim();
-            if (name) {
-                generalWaitQueue.push({ id: Date.now(), name });
-                input.value = '';
-                saveGeneralWaitQueue();
-            }
+            if (!name) return;
+            generalQueueRef().child(newId()).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            input.value = '';
         }
 
-        // Remove person from general wait queue
+        // Remove person from general wait queue (granular delete)
         function removeFromGeneralWaitQueue(personId) {
-            generalWaitQueue = generalWaitQueue.filter(p => p.id !== personId);
-            saveGeneralWaitQueue();
+            if (currentRole === 'viewer') return;
+            generalQueueRef().child(personId).remove().catch(handleWriteError);
         }
 
         // Clear all from general wait queue
         function clearGeneralWaitQueue() {
+            if (currentRole === 'viewer') return;
             if (confirm('Are you sure you want to clear the entire wait queue?')) {
-                generalWaitQueue = [];
-                saveGeneralWaitQueue();
+                generalQueueRef().remove().catch(handleWriteError);
             }
         }
 
-        // Promote a single person to a line
+        // Promote a single person from the general queue to a line.
+        // Transaction on the line's people enforces capacity under concurrency; the queue entry is
+        // removed only if the add actually committed (so the person is never lost).
         function promotePersonToLine(personId, lineId) {
-            const personIdx = generalWaitQueue.findIndex(p => p.id === personId);
-            if (personIdx === -1) return;
-            const person = generalWaitQueue[personIdx];
+            if (currentRole === 'viewer') return;
+            const person = generalWaitQueue.find(p => p.id === personId);
             const line = lineConfigs.find(l => l.id === lineId);
-            if (!line) return;
-            if (!line.people) line.people = [];
-            if (line.people.length < MAX_PEOPLE_PER_LINE) {
-                line.people.push(person);
-                generalWaitQueue.splice(personIdx, 1);
-                saveGeneralWaitQueue();
-            } else {
-                alert(`Line ${line.name} is already full.`);
-            }
-        }
-
-        // Bulk promote from wait queue to a line (fill up to capacity)
-        function bulkPromoteToLine(lineId) {
-            const line = lineConfigs.find(l => l.id === lineId);
-            if (!line) return;
-            if (!line.people) line.people = [];
-            const available = MAX_PEOPLE_PER_LINE - line.people.length;
-            if (available <= 0) {
+            if (!person || !line) return;
+            if ((line.people || []).length >= MAX_PEOPLE_PER_LINE) {
                 alert(`Line ${line.name} is already full.`);
                 return;
             }
-            const toPromote = generalWaitQueue.slice(0, available);
-            line.people = line.people.concat(toPromote);
-            generalWaitQueue = generalWaitQueue.slice(available);
-            saveGeneralWaitQueue();
+            // Move atomically in one multi-path update: add to the line's people (unique key) and
+            // remove from the general queue. Never clobbers, offline-safe.
+            const updates = {};
+            updates['config/lines/' + lineId + '/people/' + newId()] = { name: person.name, ts: Date.now() };
+            updates['config/generalWaitQueue/' + personId] = null;
+            stateRef.update(updates).catch(handleWriteError);
         }
 
-        // Save general wait queue and sync state
-        function saveGeneralWaitQueue() {
-            // Save state with generalWaitQueue
-            const state = {
-                timestamp: Date.now() / 1000,
-                config: {
-                    sessionDuration: document.getElementById("sessionDuration")?.value || "30",
-                    alarmInterval: document.getElementById("alarmInterval")?.value || "5",
-                    maxPeoplePerLine: document.getElementById("maxPeople")?.value || "10",
-                    blinkBeforeStart: document.getElementById("blinkBeforeStart")?.checked || false,
-                    blinkTime: document.getElementById("blinkTime")?.value || "5",
-                    finishWindow: document.getElementById("finishWindow")?.value || "5",
-                    autoReschedule: document.getElementById("autoReschedule")?.value || "off",
-                    lines: lineConfigs.map(config => ({
-                        id: config.id,
-                        name: config.name,
-                        time: config.time || '',
-                        people: config.people || [],
-                        waitQueue: config.waitQueue || []
-                    })),
-                    generalWaitQueue: generalWaitQueue
-                }
-            };
-            saveState(state);
-            renderGeneralWaitQueue();
-            updateLineConfigs();
+        // Bulk promote from the general queue to a line (fill up to capacity).
+        function bulkPromoteToLine(lineId) {
+            if (currentRole === 'viewer') return;
+            const line = lineConfigs.find(l => l.id === lineId);
+            if (!line) return;
+            const currentCount = (line.people || []).length;
+            const available = MAX_PEOPLE_PER_LINE - currentCount;
+            if (available <= 0) { alert(`Line ${line.name} is already full.`); return; }
+            const toPromote = generalWaitQueue.slice(0, available);
+            if (!toPromote.length) return;
+            const updates = {};
+            toPromote.forEach((p, i) => {
+                updates['config/lines/' + lineId + '/people/' + newId()] = { name: p.name, ts: Date.now() + i };
+                updates['config/generalWaitQueue/' + p.id] = null; // remove from queue in same atomic update
+            });
+            stateRef.update(updates).catch(handleWriteError);
         }
 
         // Hook up event listeners

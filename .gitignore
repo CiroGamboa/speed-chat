@@ -287,3 +287,10 @@ config.local.js
 config.local.json
 settings.local.js
 settings.local.json 
+# test scaffolding
+/index.unfixed.html
+tests/backups/
+test-results/
+playwright-report/
+.playwright/
+node_modules/
