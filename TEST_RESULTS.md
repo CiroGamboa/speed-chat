@@ -48,6 +48,10 @@ numeric loss in 2/3/5 is the decisive proof of the same root cause.)
 Run against the working-tree `index.html` (local server) → prod Firebase `/state`.
 Command: `RUN_AGAINST_PROD=1 npx playwright test`.
 
+**Also validated 10/10 against the LIVE deployed site** (`https://cirogamboa.github.io/speed-chat`) +
+prod Firebase — the true end-to-end post-deploy run:
+`RUN_AGAINST_PROD=1 BASE_URL=https://cirogamboa.github.io/speed-chat npx playwright test`.
+
 ## Note on the capacity guard
 
 The plan called for a Firebase transaction to enforce the per-line cap under concurrency. Real testing
