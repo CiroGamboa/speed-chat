@@ -1373,6 +1373,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
     <script>
         // Initialize variables first
@@ -1472,11 +1473,29 @@
         let database = null;
         let stateRef = null;
 
+        // Best-effort anonymous sign-in. This is BACKWARD-COMPATIBLE:
+        //  - Under the current public rules it's not required — if the Anonymous provider is not
+        //    enabled, sign-in fails, we log it, and everything still works.
+        //  - Once the locked-down rules ('.write': 'auth != null') are published AND the Anonymous
+        //    provider is enabled in the Firebase console, the SDK automatically attaches the auth
+        //    token to database writes, so writes keep working with no further code changes.
+        // Writes that must satisfy the rule (e.g. seeding) wait on `authReady` first.
+        let authReady = Promise.resolve();
+
         try {
             firebase.initializeApp(firebaseConfig);
             database = firebase.database();
             stateRef = database.ref(getStateNamespace());
             console.log('Firebase initialized successfully (namespace: ' + getStateNamespace() + ')');
+            try {
+                if (firebase.auth) {
+                    authReady = firebase.auth().signInAnonymously()
+                        .then(() => console.log('Signed in anonymously'))
+                        .catch((err) => console.warn('Anonymous auth unavailable (fine under public rules):', err && err.code));
+                }
+            } catch (e) {
+                console.warn('Auth init skipped:', e);
+            }
         } catch (error) {
             console.error('Error initializing Firebase:', error);
             alert('Failed to initialize Firebase. Please check your configuration.');
@@ -1633,10 +1652,14 @@
             if (rawState && rawState.timestamp && rawState.config) return; // already valid
             if (_seedAttempted) return;
             _seedAttempted = true;
-            stateRef.transaction(function (cur) {
-                if (cur && cur.timestamp && cur.config) return; // someone else seeded -> abort
-                return { timestamp: Date.now(), config: currentScalars() };
-            }, function (err) { if (err) console.error('Seed transaction failed:', err); }, false);
+            // Wait for anonymous auth to resolve first, so the seed write carries a token when the
+            // locked-down rules are in effect (a no-op delay under the current public rules).
+            authReady.finally(function () {
+                stateRef.transaction(function (cur) {
+                    if (cur && cur.timestamp && cur.config) return; // someone else seeded -> abort
+                    return { timestamp: Date.now(), config: currentScalars() };
+                }, function (err) { if (err) console.error('Seed transaction failed:', err); }, false);
+            });
         }
 
         // ========================================

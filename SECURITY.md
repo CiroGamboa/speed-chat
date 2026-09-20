@@ -27,32 +27,61 @@ data is low-value, ephemeral event scratch. Two things worth knowing:
 2. **Numeric keys are avoided on purpose.** Lines/people/queues use `crypto.randomUUID()` keys, never
    numeric ids, because Firebase coerces numeric-keyed objects back into arrays.
 
-## Recommended lockdown (future work)
+## Lockdown: ready to enable (2 Console steps)
 
-If/when you want to restrict access, the lowest-friction option that keeps the current UX is a shared
-secret checked in rules, or Firebase Anonymous Auth with a write restriction. Sketch:
+Everything on the code side is done and deployed:
 
-```json
-{
-  "rules": {
-    "state": {
-      ".read": true,
-      ".write": "auth != null",
-      ".validate": "newData.hasChildren(['timestamp', 'config'])",
-      "config": {
-        "lines": {
-          "$lineId": {
-            "name": { ".validate": "newData.isString()" },
-            "people": {
-              "$pid": { "name": { ".validate": "newData.isString()" } }
-            }
-          }
-        }
+- The app signs in **anonymously** on load (`firebase.auth().signInAnonymously()` in `index.html`),
+  backward-compatibly — under the current public rules it's simply not required, so nothing changed.
+- `database.rules.json` in this repo contains the locked-down rules (writes require auth):
+
+  ```json
+  {
+    "rules": {
+      "state": {
+        ".read": true,
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['timestamp', 'config'])"
       }
     }
   }
-}
-```
+  ```
 
-Enabling `auth != null` requires the app to sign in (e.g. anonymous auth) on load. That is a small,
-separate change and is **not** part of the sync/alarm fix.
+- The test harness authenticates its REST writes when auth is available, so the suite works before
+  and after lockdown.
+
+**Why this can't be done from the dev environment:** the rules endpoint is admin-only (403 without a
+secret), there is no Firebase CLI, and the available `gcloud` account does not have access to the
+`chill-speed-chat` Firebase project. The two steps below must be done in the Firebase Console (on the
+account that owns the project), or by authenticating the Firebase CLI as that owner.
+
+### Step 1 — enable Anonymous Auth
+Firebase Console → **Build → Authentication → Sign-in method → Anonymous → Enable**.
+(Currently disabled — verified: `signInAnonymously` returns `CONFIGURATION_NOT_FOUND`.)
+
+### Step 2 — publish the rules
+Firebase Console → **Build → Realtime Database → Rules** → paste `database.rules.json` → **Publish**.
+(Or with the Firebase CLI as the project owner: `firebase deploy --only database`.)
+
+### Order & safety
+Do Step 1 **before** Step 2. The app is already deployed with anonymous sign-in, so once both steps
+are done, writes carry a token and keep working. Reads stay public (`.read: true`), so viewers are
+never blocked.
+
+### Verify
+- App: open the live site, add a person, confirm it still saves (check the browser console for
+  "Signed in anonymously").
+- Unauthenticated writes are now blocked (should return 401):
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}\n" -X PUT \
+    -d '{"x":1}' "https://chill-speed-chat-default-rtdb.firebaseio.com/state/probe.json"
+  ```
+- Re-run the suite (it self-authenticates): `RUN_AGAINST_PROD=1 npm test`.
+
+### Rollback
+Re-publish the original public rules (set `.write` back to `true`) in the Console; the app keeps
+working either way.
+
+> Note: anonymous auth only blocks drive-by *unauthenticated* writes — anyone can still anon-sign-in.
+> For a low-value, ephemeral app that's a reasonable bar. For stronger control, gate on a real
+> sign-in (Google) and restrict to known UIDs.

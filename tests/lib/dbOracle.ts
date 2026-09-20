@@ -10,13 +10,45 @@ export const DB_BASE = 'https://chill-speed-chat-default-rtdb.firebaseio.com';
 // STATE_NS if you ever want isolation (would require a matching security rule for that path).
 export const STATE_NS = process.env.STATE_NS || 'state';
 
-function url(path: string): string {
+const API_KEY = 'AIzaSyDWcpXD5jJgq-7l8N6JRoaZu0FbZTy7jh4';
+
+// Under the locked-down rules ('.write': 'auth != null'), REST writes need an auth token. We fetch a
+// Firebase anonymous idToken lazily; if the Anonymous provider isn't enabled (current public rules),
+// this fails and we fall back to unauthenticated writes — so the suite works before AND after lockdown.
+let _tokenPromise: Promise<string | null> | null = null;
+async function authToken(): Promise<string | null> {
+  if (!_tokenPromise) {
+    _tokenPromise = (async () => {
+      try {
+        const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ returnSecureToken: true }),
+        });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return j.idToken || null;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return _tokenPromise;
+}
+
+async function url(path: string, needsAuth: boolean): Promise<string> {
   const p = path ? '/' + path.replace(/^\/+/, '') : '';
-  return `${DB_BASE}/${STATE_NS}${p}.json`;
+  let u = `${DB_BASE}/${STATE_NS}${p}.json`;
+  if (needsAuth) {
+    const t = await authToken();
+    if (t) u += `?auth=${t}`;
+  }
+  return u;
 }
 
 async function rest(method: string, path: string, body?: unknown): Promise<any> {
-  const res = await fetch(url(path), {
+  const isWrite = method !== 'GET';
+  const res = await fetch(await url(path, isWrite), {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
