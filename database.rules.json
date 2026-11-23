@@ -3,7 +3,10 @@
     "state": {
       ".read": true,
       ".write": "auth != null",
-      ".validate": "newData.hasChildren(['timestamp', 'config'])"
+      ".validate": "newData.hasChildren(['timestamp', 'config'])",
+      "log": {
+        ".indexOn": ["at"]
+      }
     }
   }
 }
