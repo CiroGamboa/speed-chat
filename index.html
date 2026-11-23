@@ -1519,6 +1519,32 @@
 
         function serverNow() { return Date.now() + _serverOffset; }
 
+        // Rescheduling must only ever happen on a view we know is current. The authoritative
+        // signal is the RTDB connection, NOT the tick cadence: a tab whose timers are throttled
+        // (hidden tabs get one callback per minute) still has a live websocket delivering
+        // snapshots, so it is not stale and must stay free to advance lines. A tab that is
+        // disconnected, or that has just reconnected and not yet been re-sent the state, may be
+        // holding a schedule another client has already advanced.
+        let _connected = false;
+        let _connectedSince = 0;
+        let _lastSnapshotAt = 0;
+        const RESYNC_GRACE_MS = 10000;
+        try {
+            if (database) {
+                database.ref('.info/connected').on('value', function (snap) {
+                    const up = snap.val() === true;
+                    if (up && !_connected) _connectedSince = serverNow();
+                    _connected = up;
+                });
+            }
+        } catch (e) { console.warn('.info/connected unavailable:', e); }
+
+        function scheduleViewIsStale() {
+            if (!_connected) return true;                         // offline: we cannot know
+            if (_lastSnapshotAt >= _connectedSince) return false;  // re-synced since connecting
+            return serverNow() - _connectedSince < RESYNC_GRACE_MS; // still awaiting the resync
+        }
+
         // Identifies this tab in the reschedule audit log (see logReschedule).
         const CLIENT_ID = (function () {
             try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().slice(0, 8); } catch (e) { /* ignore */ }
@@ -1684,8 +1710,8 @@
                     offset: _serverOffset,
                     at: firebase.database.ServerValue.TIMESTAMP
                 }, entry));
-                if (p && p.catch) p.catch(function (err) { console.warn('Audit log write failed:', err); });
-            } catch (e) { console.warn('Audit log write failed:', e); }
+                if (p && p.catch) p.catch(function (err) { console.error('Audit log write failed:', err && (err.code || err.message) || err); });
+            } catch (e) { console.error('Audit log write failed:', e); }
         }
 
         // Keep the node small: an admin tab drops entries older than a week, once per load.
@@ -1782,10 +1808,9 @@
                         migrateToKeyed();
                     }
 
-                    // Our view is current again: a snapshot just landed. Cleared before
+                    // Our view is current again: a snapshot just landed. Recorded before
                     // updateTimers() below, which ticks immediately.
-                    _resyncPending = false;
-                    clearTimeout(_resyncTimer);
+                    _lastSnapshotAt = serverNow();
 
                     // Update UI elements
                     updateUIFromState(newState.config);
@@ -2229,34 +2254,37 @@
             _globalTickId = setInterval(globalTick, 200);
         }
 
-        // A gap longer than this between ticks means the loop was not running: device sleep,
-        // screen lock, a discarded tab, or background throttling (hidden tabs are throttled to one
-        // timer callback per minute). After such a gap our view of the schedule may predate changes
-        // we have not received yet.
+        // Only used to log a tick gap for diagnosis. A gap does NOT suppress rescheduling: see
+        // scheduleViewIsStale(), which keys off the connection instead.
         const TICK_GAP_MS = 5000;
         let _lastTickAt = 0;
-        let _resyncPending = false;
-        let _resyncTimer = null;
 
-        // Block rescheduling until a fresh snapshot lands. The safety valve stops a tab being
-        // blocked for ever if no snapshot ever arrives.
-        function markResyncPending(reason) {
-            if (!_resyncPending) console.log('Reschedule suppressed until resync (' + reason + ')');
-            _resyncPending = true;
-            clearTimeout(_resyncTimer);
-            _resyncTimer = setTimeout(function () { _resyncPending = false; }, 15000);
+        // lineId -> serverNow() when a reschedule write was issued. Stops the 200 ms tick
+        // re-firing the same write. Timed out rather than cleared only by the callback, because
+        // RTDB does not run a transaction's completion callback while the client is offline, and
+        // a line must not be blocked from advancing for the rest of the event because of it. A
+        // retry issued after the timeout is adjudicated by the compare-and-swap anyway.
+        const _rescheduleInFlight = {};
+        const INFLIGHT_TIMEOUT_MS = 30000;
+        function rescheduleInFlight(line) {
+            const issued = _rescheduleInFlight[line];
+            if (!issued) return false;
+            if (serverNow() - issued > INFLIGHT_TIMEOUT_MS) { delete _rescheduleInFlight[line]; return false; }
+            return true;
         }
 
-        // Lines with a reschedule write in flight. Stops the 200 ms tick re-firing the write and,
-        // when a write is rejected, stops it retrying at 200 Hz.
-        const _rescheduleInFlight = {};
+        // lineId -> serverNow() until which this line is not retried, applied after a compare-and-
+        // swap abort so a stale tab does not spin on aborts until its next snapshot lands.
+        const _rescheduleCooldown = {};
+        const COOLDOWN_MS = 3000;
+        function rescheduleCoolingDown(line) { return (_rescheduleCooldown[line] || 0) > serverNow(); }
 
         // Advance a line's start time with a compare-and-swap: write only if the stored value is
         // still the one this tab last saw. A tab resuming from sleep with stale state therefore
         // cannot clobber a line another client already advanced -- its transaction aborts, the
         // abort is logged, and it waits for a fresh snapshot instead.
         function commitReschedule(line, config, prevTimeStr, newTimeStr) {
-            _rescheduleInFlight[line] = true;
+            _rescheduleInFlight[line] = serverNow();
             const lineName = config.name;
             lineRef(line).child('time').transaction(function (cur) {
                 // Returning undefined aborts the transaction and leaves `cur` untouched.
@@ -2274,8 +2302,12 @@
                     const timeSelect = document.getElementById('time' + line);
                     if (timeSelect) timeSelect.value = newTimeStr;
                 } else if (!err) {
-                    // Someone else got there first: our view is stale by definition.
-                    markResyncPending('reschedule of ' + lineName + ' aborted (expected "' + prevTimeStr + '")');
+                    // Someone else got there first. Back off briefly rather than re-firing every
+                    // tick: the transaction has already refreshed this path, so the snapshot that
+                    // corrects our view is moments away.
+                    _rescheduleCooldown[line] = serverNow() + COOLDOWN_MS;
+                    console.warn('Reschedule of ' + lineName + ' aborted (expected "' + prevTimeStr +
+                        '"); another client already advanced it.');
                 }
                 logReschedule({
                     lineId: line, lineName: lineName, from: prevTimeStr || '', to: newTimeStr || '',
@@ -2329,10 +2361,12 @@
                     warned30[line] = undefined;
 
                     // Auto-reschedule (writers only — viewers must never write).
-                    // Suppressed while this tab's view of the DB may be stale (_resyncPending): a
-                    // tab that just woke up must not re-expire lines another client has already
-                    // advanced. commitReschedule() compare-and-swaps as a second line of defence.
-                    if (currentRole !== 'viewer' && !_resyncPending && !_rescheduleInFlight[line]) {
+                    // Suppressed while this tab's view of the DB may be stale (disconnected, or
+                    // reconnected without a resync yet): a tab that just woke up must not re-expire
+                    // lines another client has already advanced. commitReschedule() compare-and-
+                    // swaps as a second line of defence.
+                    if (currentRole !== 'viewer' && !scheduleViewIsStale() &&
+                        !rescheduleInFlight(line) && !rescheduleCoolingDown(line)) {
                         const autoRescheduleValue = document.getElementById('autoReschedule').value;
                         const prevTimeStr = config.time;
                         if (autoRescheduleValue !== 'off') {
@@ -2385,11 +2419,12 @@
         }
 
         function globalTick() {
-            // Detect a gap in the tick loop (sleep / lock / throttled or discarded tab) and
-            // suppress rescheduling until a fresh snapshot lands. Countdowns keep painting.
+            // A gap means the loop was not running (sleep / lock / throttled or discarded tab).
+            // Logged for diagnosis only -- suppressing on it would permanently disable
+            // rescheduling on a throttled-but-connected tab, whose data is in fact current.
             const t = serverNow();
             if (_lastTickAt && t - _lastTickAt > TICK_GAP_MS) {
-                markResyncPending('tick gap of ' + Math.round((t - _lastTickAt) / 1000) + 's');
+                console.log('Tick gap of ' + Math.round((t - _lastTickAt) / 1000) + 's');
             }
             _lastTickAt = t;
 
@@ -3043,18 +3078,32 @@
             }
         }
 
-        // Test hook: the Playwright scheduling suite exercises the slot maths directly rather
-        // than waiting out real 30-minute sessions. Read-only apart from totalSessionTime.
-        window.__sched = {
-            roundUpTo5: roundUpTo5,
-            nextStartForLine: nextStartForLine,
-            commitReschedule: commitReschedule,
-            serverNow: serverNow,
-            parseTime: parseTime,
-            formatTime: formatTime,
-            get totalSessionTime() { return TOTAL_SESSION_TIME; },
-            set totalSessionTime(v) { TOTAL_SESSION_TIME = v; }
-        };
+        // Test hook: the Playwright scheduling suite exercises the slot maths directly rather than
+        // waiting out real 30-minute sessions. Exposed ONLY to the local harness -- a page served
+        // from localhost, or one opened with ?diag=1 -- because commitReschedule() would otherwise
+        // let anyone with a console on the venue machine rewrite every screen's schedule, and the
+        // totalSessionTime setter would silently resize every running session.
+        (function () {
+            const host = location.hostname;
+            const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '';
+            let diag = false;
+            try { diag = new URLSearchParams(location.search).get('diag') === '1'; } catch (e) { /* ignore */ }
+            if (!isLocal && !diag) return;
+            window.__sched = {
+                roundUpTo5: roundUpTo5,
+                nextStartForLine: nextStartForLine,
+                commitReschedule: commitReschedule,
+                serverNow: serverNow,
+                parseTime: parseTime,
+                formatTime: formatTime,
+                scheduleViewIsStale: scheduleViewIsStale,
+                // Pretends the tick loop was paused for `ms`, so a test can prove that a long
+                // gap does NOT stop a connected tab from rescheduling.
+                forceTickGap: function (ms) { _lastTickAt = serverNow() - ms; },
+                get totalSessionTime() { return TOTAL_SESSION_TIME; },
+                set totalSessionTime(v) { TOTAL_SESSION_TIME = v; }
+            };
+        })();
 
         // Update next line information every 30 seconds
         setInterval(updateNextLineInfo, 30000);

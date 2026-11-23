@@ -24,7 +24,9 @@ export class Actor {
     this.role = role;
   }
 
-  static async create(browser: Browser, opts: { label: string; role: Role }): Promise<Actor> {
+  // `query` appends extra URL parameters (e.g. 'diag=1', which the app requires before exposing
+  // its scheduling test hook on a non-localhost deployment).
+  static async create(browser: Browser, opts: { label: string; role: Role; query?: string }): Promise<Actor> {
     const a = new Actor(opts.label, opts.role);
     a.context = await browser.newContext();
     a.page = await a.context.newPage();
@@ -47,7 +49,7 @@ export class Actor {
 
     a.cdp = await a.context.newCDPSession(a.page);
 
-    const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}`;
+    const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}${opts.query ? '&' + opts.query : ''}`;
     await a.page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // Dismiss the password modal if present.
