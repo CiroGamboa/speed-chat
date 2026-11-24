@@ -1009,6 +1009,189 @@
             transform: scale(0.95);
         }
 
+        /* ---- Alarm audio health UI (arming banner + honest status badge) ---- */
+
+        /* Shown whenever the page has NOT been allowed to make sound yet. This is the
+           fix for the venue screen that is left untouched all night: the password modal
+           is skipped once localStorage says "verified", so without this banner nothing
+           ever tells the operator that no gesture has armed audio. */
+        .audio-arm-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 1.1rem 1rem;
+            background: #b00020;
+            color: #fff;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-align: center;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            z-index: 5000;
+            display: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            animation: armPulse 1.6s ease-in-out infinite;
+        }
+
+        .audio-arm-banner.visible {
+            display: block;
+        }
+
+        .audio-arm-banner small {
+            display: block;
+            font-size: 0.95rem;
+            font-weight: normal;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        @keyframes armPulse {
+            0%, 100% { background: #b00020; }
+            50% { background: #e53935; }
+        }
+
+        /* The arm banner is fixed at the top, so push the toggle bar clear of it. */
+        body.audio-unarmed .alarm-toggle-container {
+            top: 6.5rem;
+        }
+
+        .audio-badge {
+            font-size: 0.72rem;
+            font-weight: bold;
+            line-height: 1.2;
+            padding: 0.25rem 0.45rem;
+            border-radius: 4px;
+            white-space: nowrap;
+            cursor: pointer;
+            border: 1px solid transparent;
+            max-width: 22rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .audio-badge.state-ok {
+            background: #e6f4ea;
+            color: #1e6b33;
+            border-color: #9bcfab;
+        }
+
+        .audio-badge.state-warn {
+            background: #fff4e5;
+            color: #8a5200;
+            border-color: #e8c07d;
+        }
+
+        .audio-badge.state-bad {
+            background: #b00020;
+            color: #fff;
+            border-color: #7a0016;
+            animation: armPulse 1.6s ease-in-out infinite;
+        }
+
+        /* The rotation banner has to be impossible to miss: when the speaker is dead
+           (wrong Windows output device, muted mixer channel) this is the only thing
+           left that can stop a round overrunning. */
+        .notification.alarm-live {
+            width: min(90vw, 1100px);
+            padding: 3rem 2rem;
+            font-size: clamp(2.5rem, 7vw, 5rem);
+            line-height: 1.15;
+            border: 6px solid #fff;
+            animation: alarmPulse 0.9s ease-in-out infinite;
+        }
+
+        .notification .notification-sub {
+            display: block;
+            margin-top: 1rem;
+            font-size: clamp(0.9rem, 1.6vw, 1.2rem);
+            font-weight: normal;
+            opacity: 0.9;
+        }
+
+        @keyframes alarmPulse {
+            0%, 100% { background: rgba(143, 0, 87, 0.97); transform: translate(-50%, -50%) scale(1); }
+            50% { background: rgba(224, 0, 136, 0.97); transform: translate(-50%, -50%) scale(1.03); }
+        }
+
+        .notification-overlay.alarm-live {
+            background: rgba(0, 0, 0, 0.85);
+        }
+
+        /* 30-second warning: previously had no visual at all. */
+        .warn30-toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #8f0057;
+            color: #fff;
+            padding: 0.9rem 1.6rem;
+            border-radius: 999px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            z-index: 1998;
+            display: none;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        }
+
+        .warn30-toast.visible {
+            display: block;
+        }
+
+        .sound-check {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            color: #8f0057;
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 5200;
+            display: none;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+            border: 3px solid #8f0057;
+            max-width: 90vw;
+        }
+
+        .sound-check.visible {
+            display: block;
+        }
+
+        .sound-check h3 {
+            margin: 0 0 0.5rem;
+            font-size: 1.4rem;
+        }
+
+        .sound-check p {
+            margin: 0 0 1.2rem;
+            font-size: 0.95rem;
+            color: #555;
+        }
+
+        .sound-check button {
+            border: none;
+            padding: 0.7rem 1.4rem;
+            margin: 0 0.3rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .sound-check .yes-btn {
+            background: #1e6b33;
+            color: #fff;
+        }
+
+        .sound-check .no-btn {
+            background: #b00020;
+            color: #fff;
+        }
+
         /* Wait Queue Styles */
         .wait-queue-management {
             width: 100%;
@@ -1187,6 +1370,10 @@
             <label for="alarmToggle"></label>
         </div>
         <button id="playAlarmButton" class="play-alarm-button" onclick="playAlarmManually()" title="Play alarm sound">▶</button>
+        <button id="soundTestButton" class="play-alarm-button" onclick="AlarmAudio.runSoundCheck()"
+            title="Play a short test tone and confirm you heard it">Test sound</button>
+        <span id="audioBadge" class="audio-badge state-warn" onclick="AlarmAudio.runSoundCheck()"
+            title="Alarm audio status — click to run a sound check">Checking audio…</span>
     </div>
 
     <div id="currentTimeDisplay"
@@ -1194,9 +1381,25 @@
         <span id="currentTime">--:--</span>
     </div>
 
+    <div class="audio-arm-banner" id="audioArmBanner" onclick="AlarmAudio.armFromGesture('banner')">
+        🔇 ALARM SOUND IS NOT ENABLED — CLICK HERE
+        <small>This browser blocks sound until the page is clicked. The alarm will show on screen but
+            will stay silent until you do.</small>
+    </div>
+
     <div class="notification-overlay" id="notificationOverlay"></div>
     <div class="notification" id="changeSeatNotification">
-        Change, go to the next table
+        <span id="changeSeatNotificationText">Change, go to the next table</span>
+        <span class="notification-sub" id="changeSeatNotificationSub"></span>
+    </div>
+
+    <div class="warn30-toast" id="warn30Toast">30 seconds to the next change</div>
+
+    <div class="sound-check" id="soundCheck">
+        <h3>Did you hear the test sound?</h3>
+        <p>Only you can confirm this — the app cannot tell whether the speaker actually played.</p>
+        <button class="yes-btn" onclick="AlarmAudio.confirmHeard(true)">Yes, I heard it</button>
+        <button class="no-btn" onclick="AlarmAudio.confirmHeard(false)">No, nothing</button>
     </div>
 
     <div class="config-section" id="configSection">
@@ -1358,6 +1561,9 @@
                 </div>
                 <div class="form-buttons">
                     <button type="button" class="reset-btn" onclick="resetApplication()">Reset All Settings</button>
+                    <button type="button" class="reset-btn" style="background:#444"
+                        onclick="AlarmAudio.downloadDiagnostics()"
+                        title="Download the alarm audio log for this machine">Download alarm diagnostics</button>
                 </div>
             </form>
         </div>
@@ -1389,61 +1595,667 @@
         let BLINK_TIME_MIN = 5;
         let currentRole = getRoleFromUrl(); // Initialize role from URL
         let isUpdatingUI = false;
-        let alarmDuration = 0;
-        let alarm30sDuration = 0;
-        let audioEnabled = false;
         let AUTO_RESCHEDULE_MIN = 'off';
         let alarmsEnabled = localStorage.getItem('alarmsEnabled') !== 'false'; // Default to true if not set
 
         let lineOrder = [];
 
-        // Enable audio on first user interaction. Listen for click, keydown AND touchstart so a
-        // tap or keypress unlocks audio on tablets/phones too (not just a mouse click).
-        const _audioUnlockEvents = ['click', 'keydown', 'touchstart'];
-        function enableAudio() {
-            if (audioEnabled) return;
-            audioEnabled = true;
-            // Try to play and immediately pause to unlock both alarm clips for later programmatic play.
-            Promise.all([
-                bell.play().then(() => {
-                    bell.pause();
-                    bell.currentTime = 0;
-                    console.log('Main alarm audio enabled successfully');
-                }).catch(error => {
-                    console.error('Error enabling main alarm audio:', error);
-                }),
-                bell30s.play().then(() => {
-                    bell30s.pause();
-                    bell30s.currentTime = 0;
-                    console.log('30-second alarm audio enabled successfully');
-                }).catch(error => {
-                    console.error('Error enabling 30-second alarm audio:', error);
-                })
-            ]).then(() => {
-                console.log('All audio enabled successfully');
+        // ====================================================================
+        // AlarmAudio — the alarm output path.
+        //
+        // Why this exists: the venue screen is normally left untouched, and the
+        // password modal is skipped once localStorage says "verified", so the page
+        // could run all night without ever receiving the click that browsers require
+        // before they will emit sound. The old code set audioEnabled = true
+        // optimistically on the first gesture and never told anyone when there had
+        // been no gesture at all — the alarm showed on screen and stayed silent.
+        //
+        // Design notes:
+        //  * Arming is confirmed, not assumed: AudioContext.state === 'running' is the
+        //    honest signal, because browsers refuse to start a context without user
+        //    activation. A muted play() would NOT prove anything (muted playback is
+        //    always permitted).
+        //  * Playback runs on one long-lived AudioContext that is kept warm by a
+        //    continuous, non-zero, inaudible tone. Chromium tears down a sink that is
+        //    fed all-zero buffers, and re-opening it costs a Bluetooth speaker 1-3s of
+        //    A2DP restart — which is how the opening of an alarm gets swallowed.
+        //  * A fresh <audio> element per ring is the fallback: a new element authorises
+        //    its output sink against the CURRENT default device, so it recovers from a
+        //    stale or re-routed endpoint. It is id-stamped so the Playwright harness,
+        //    which stubs HTMLMediaElement.prototype.play, still recognises it.
+        //  * We can detect stalls, rejections and un-armed state. We CANNOT detect
+        //    silence: nothing in JS can see the Windows per-app volume, which endpoint
+        //    the sink landed on, or whether the speaker is awake. The badge therefore
+        //    never claims "sound OK" — only an operator confirming they heard it can.
+        //  * Handled audio-health conditions are logged with console.warn/info, never
+        //    console.error: the test harness asserts there are no console errors.
+        // ====================================================================
+        const AlarmAudio = (function () {
+            const CLIP_SRC = { bell: 'alarm.mp3', bell30s: '30s_alarm.mp3' };
+            const LOG_MAX = 500;
+            const LOG_KEY = 'speedchat_alarm_log';
+            const HEARD_KEY = 'speedchat_sound_confirmed_at';
+            const CONFIRM_STALE_MS = 45 * 60 * 1000;
+            const VERIFY_DELAY_MS = 400;
+            const KEEPALIVE_GAIN = 1e-3;   // ~ -60 dBFS: inaudible, but NOT zero.
+            const KEEPALIVE_HZ = 40;
+
+            let ctx = null;
+            let masterGain = null;
+            let keepAlive = null;
+            let keepAliveWanted = false;
+            const buffers = {};
+            const blobUrls = {};
+            const liveElements = new Set();   // hold refs so nothing is GC'd mid-play
+            let armed = false;
+            let armInFlight = null;
+            let armRetryQueued = false;
+            let elementUnlocked = false;
+            let instanceSeq = 0;
+            let lastRingAt = null;
+            let lastResult = null;
+            let heardAt = Number(localStorage.getItem(HEARD_KEY)) || null;
+            let pendingCheck = false;
+
+            const log = [];
+            let seq = 0;
+            let persistTimer = null;
+
+            // ---- diagnostics ------------------------------------------------
+            function diag(event, detail) {
+                const entry = {
+                    seq: ++seq,
+                    t: Date.now(),
+                    iso: new Date().toISOString(),
+                    perf: Math.round(performance.now()),
+                    event: event,
+                    detail: detail === undefined ? null : detail
+                };
+                log.push(entry);
+                while (log.length > LOG_MAX) log.shift();
+                persistSoon();
+                publish();
+                return entry;
+            }
+
+            function persistSoon() {
+                if (persistTimer) return;
+                persistTimer = setTimeout(function () {
+                    persistTimer = null;
+                    // The operator's instinct on failure is to reload the page, which would
+                    // otherwise destroy every bit of evidence about what went wrong.
+                    try { localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(-LOG_MAX))); } catch (e) { /* quota */ }
+                }, 2000);
+            }
+
+            function publish() {
+                window.__alarmLog = log;
+                window.__audioHealth = {
+                    armed: armed,
+                    ctxState: ctx ? ctx.state : 'none',
+                    keepAlive: !!keepAlive,
+                    lastRingAt: lastRingAt,
+                    lastResult: lastResult,
+                    heardAt: heardAt,
+                    instances: instanceSeq,
+                    clipsDecoded: Object.keys(buffers),
+                    clipsFetched: Object.keys(blobUrls)
+                };
+            }
+
+            function sessionHeader() {
+                return {
+                    ua: navigator.userAgent,
+                    href: location.href,
+                    startedIso: new Date().toISOString(),
+                    sampleRate: ctx ? ctx.sampleRate : null,
+                    baseLatency: ctx && ctx.baseLatency != null ? ctx.baseLatency : null,
+                    outputLatency: ctx && ctx.outputLatency != null ? ctx.outputLatency : null
+                };
+            }
+
+            // ---- AudioContext ------------------------------------------------
+            function ensureCtx() {
+                if (ctx) return ctx;
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) { diag('ctx.unsupported'); return null; }
+                try {
+                    ctx = new AC();
+                    masterGain = ctx.createGain();
+                    masterGain.gain.value = 1;
+                    masterGain.connect(ctx.destination);
+                    ctx.onstatechange = function () {
+                        diag('ctx.statechange', { state: ctx.state });
+                        if (ctx.state !== 'running') {
+                            stopKeepAliveNode();
+                        } else if (keepAliveWanted) {
+                            startKeepAlive();
+                        }
+                        // The context can start running later than the gesture that allowed
+                        // it, so this is also an arming signal, not only a teardown one.
+                        recomputeArmed('statechange');
+                    };
+                    diag('ctx.created', {
+                        state: ctx.state,
+                        sampleRate: ctx.sampleRate,
+                        baseLatency: ctx.baseLatency != null ? ctx.baseLatency : null
+                    });
+                } catch (e) {
+                    ctx = null;
+                    diag('ctx.error', String(e));
+                }
+                return ctx;
+            }
+
+            // ---- clip loading ------------------------------------------------
+            function loadClip(name) {
+                return fetch(CLIP_SRC[name], { cache: 'force-cache' }).then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.arrayBuffer();
+                }).then(function (buf) {
+                    // Blob first: decodeAudioData detaches the ArrayBuffer it is given, so
+                    // it gets its own copy. Pre-fetching also means the alarm never depends
+                    // on venue wifi at the exact second it has to fire.
+                    try {
+                        blobUrls[name] = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
+                    } catch (e) { diag('clip.blobFailed', { clip: name, error: String(e) }); }
+                    diag('clip.fetched', { clip: name, bytes: buf.byteLength });
+                    const c = ensureCtx();
+                    if (!c) return;
+                    return c.decodeAudioData(buf.slice(0)).then(function (ab) {
+                        buffers[name] = ab;
+                        diag('clip.decoded', { clip: name, ms: Math.round(ab.duration * 1000) });
+                    }).catch(function (err) {
+                        // Not fatal: the element path still has the blob URL.
+                        diag('clip.decodeFailed', { clip: name, error: String(err) });
+                    });
+                }).catch(function (err) {
+                    diag('clip.fetchFailed', { clip: name, error: String(err) });
+                });
+            }
+
+            function loadClips() {
+                Object.keys(CLIP_SRC).forEach(loadClip);
+            }
+
+            // ---- arming ------------------------------------------------------
+            function probeElement(el) {
+                // Deliberately NOT muted: muted playback is always allowed, so it would
+                // tell us nothing about whether we may actually make a sound.
+                return new Promise(function (resolve) {
+                    let restoreVol = 1;
+                    try {
+                        restoreVol = el.volume;
+                        el.volume = 0.0001;
+                        const p = el.play();
+                        if (!p || typeof p.then !== 'function') {
+                            try { el.pause(); el.currentTime = 0; } catch (e) { /* ignore */ }
+                            el.volume = restoreVol;
+                            return resolve(true);
+                        }
+                        p.then(function () {
+                            try { el.pause(); el.currentTime = 0; } catch (e) { /* ignore */ }
+                            el.volume = restoreVol;
+                            resolve(true);
+                        }).catch(function (err) {
+                            el.volume = restoreVol;
+                            diag('arm.elementBlocked', { id: el.id, error: String(err) });
+                            resolve(false);
+                        });
+                    } catch (e) {
+                        try { el.volume = restoreVol; } catch (e2) { /* ignore */ }
+                        diag('arm.elementError', { id: el.id, error: String(e) });
+                        resolve(false);
+                    }
+                });
+            }
+
+            // The AudioContext is the authoritative arming signal: a browser will not let a
+            // context reach 'running' without user activation. The element probe only decides
+            // arming on a browser with no Web Audio at all — on its own it proves nothing,
+            // because a stubbed or permissive play() resolves whether or not we may be heard.
+            function recomputeArmed(source) {
+                const next = ctx ? (ctx.state === 'running') : elementUnlocked;
+                if (next === armed) { renderBadge(); return armed; }
+                armed = next;
+                diag(armed ? 'arm.ok' : 'arm.blocked', {
+                    source: source,
+                    ctxState: ctx ? ctx.state : 'none',
+                    elementUnlocked: elementUnlocked
+                });
+                if (armed) {
+                    if (!window.__alarmSessionLogged) {
+                        window.__alarmSessionLogged = true;
+                        diag('session', sessionHeader());
+                    }
+                    if (keepAliveWanted) startKeepAlive();
+                }
+                renderBadge();
+                return armed;
+            }
+
+            function tryArm(source) {
+                if (armed) return Promise.resolve(true);
+                if (armInFlight) {
+                    // A gesture landing while an earlier attempt is still settling must not be
+                    // swallowed — that earlier attempt may have had no activation behind it.
+                    armRetryQueued = true;
+                    return armInFlight;
+                }
+                diag('arm.attempt', { source: source });
+                const c = ensureCtx();
+                // Chrome does NOT reject resume() on a context blocked by the autoplay policy:
+                // the promise simply never settles until a real gesture arrives. Awaiting it
+                // unguarded wedges arming forever on the very first attempt — which is the
+                // silent-alarm failure this whole module exists to prevent.
+                const resumed = c && typeof c.resume === 'function'
+                    ? Promise.race([
+                        c.resume().catch(function (e) { diag('ctx.resumeFailed', String(e)); }),
+                        new Promise(function (r) { setTimeout(r, 1500); })
+                    ])
+                    : Promise.resolve();
+
+                armInFlight = resumed.then(function () {
+                    return Promise.all([probeElement(bell), probeElement(bell30s)]);
+                }).then(function (probes) {
+                    elementUnlocked = probes.some(Boolean);
+                    const ok = recomputeArmed(source);
+                    if (!ok) {
+                        console.warn('[alarm] audio is not armed yet — the page has had no user gesture');
+                    }
+                    armInFlight = null;
+                    if (!ok && armRetryQueued) {
+                        armRetryQueued = false;
+                        return tryArm('retry:' + source);
+                    }
+                    armRetryQueued = false;
+                    return ok;
+                }).catch(function (e) {
+                    armInFlight = null;
+                    armRetryQueued = false;
+                    diag('arm.error', String(e));
+                    renderBadge();
+                    return false;
+                });
+                return armInFlight;
+            }
+
+            // ---- keep-alive ----------------------------------------------------
+            function startKeepAlive() {
+                keepAliveWanted = true;
+                const c = ensureCtx();
+                if (!c || c.state !== 'running' || keepAlive) return;
+                try {
+                    const osc = c.createOscillator();
+                    const g = c.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = KEEPALIVE_HZ;
+                    g.gain.value = KEEPALIVE_GAIN;
+                    osc.connect(g);
+                    g.connect(c.destination);
+                    osc.start();
+                    keepAlive = { osc: osc, gain: g };
+                    diag('keepalive.start', { gain: KEEPALIVE_GAIN, hz: KEEPALIVE_HZ });
+                } catch (e) {
+                    diag('keepalive.error', String(e));
+                }
+            }
+
+            function stopKeepAliveNode() {
+                if (!keepAlive) return;
+                try {
+                    keepAlive.osc.stop();
+                    keepAlive.osc.disconnect();
+                    keepAlive.gain.disconnect();
+                } catch (e) { /* already torn down */ }
+                keepAlive = null;
+            }
+
+            function stopKeepAlive() {
+                if (!keepAliveWanted && !keepAlive) return;
+                keepAliveWanted = false;
+                stopKeepAliveNode();
+                diag('keepalive.stop');
+            }
+
+            // ---- playback paths -------------------------------------------------
+            function playViaBuffer(clip) {
+                const c = ensureCtx();
+                if (!c || !buffers[clip]) {
+                    return Promise.resolve({ status: 'failed', path: 'buffer', detail: 'no-decoded-buffer' });
+                }
+                if (c.state !== 'running') {
+                    return Promise.resolve({ status: 'failed', path: 'buffer', detail: 'ctx-' + c.state });
+                }
+                try {
+                    const src = c.createBufferSource();
+                    src.buffer = buffers[clip];
+                    src.connect(masterGain);
+                    const t0 = c.currentTime;
+                    src.start();
+                    return new Promise(function (resolve) {
+                        setTimeout(function () {
+                            const moved = c.state === 'running' && c.currentTime > t0;
+                            resolve(moved
+                                ? { status: 'ok', path: 'buffer' }
+                                : { status: 'failed', path: 'buffer', detail: 'clock-stalled-' + c.state });
+                        }, VERIFY_DELAY_MS);
+                    });
+                } catch (e) {
+                    return Promise.resolve({ status: 'failed', path: 'buffer', detail: String(e) });
+                }
+            }
+
+            function playViaElement(clip, instance) {
+                let el;
+                try {
+                    // A FRESH element every ring. It authorises its sink against the current
+                    // default output, so a stale or re-routed endpoint cannot stay wedged for
+                    // the rest of the event. The id is what the Playwright play() stub keys on.
+                    el = new Audio(blobUrls[clip] || CLIP_SRC[clip]);
+                    el.id = clip;
+                    el.preload = 'auto';
+                } catch (e) {
+                    return Promise.resolve({ status: 'failed', path: 'element', detail: String(e) });
+                }
+                liveElements.add(el);
+                const release = function () { liveElements.delete(el); };
+                el.addEventListener('ended', release, { once: true });
+                setTimeout(release, 60000);
+
+                let p;
+                try { p = el.play(); } catch (e) {
+                    release();
+                    return Promise.resolve({ status: 'failed', path: 'element', detail: String(e) });
+                }
+                const started = (p && typeof p.then === 'function') ? p : Promise.resolve();
+                return started.then(function () {
+                    return verifyElement(el);
+                }).catch(function (err) {
+                    release();
+                    return { status: 'failed', path: 'element', detail: 'rejected: ' + String(err) };
+                });
+            }
+
+            function verifyElement(el) {
+                const t0 = el.currentTime;
+                return new Promise(function (resolve) {
+                    setTimeout(function () {
+                        let status, detail = null;
+                        if (el.error) {
+                            status = 'failed';
+                            detail = 'media-error-' + el.error.code;
+                        } else if (el.readyState < 2 || !isFinite(el.duration)) {
+                            // We were never in a position to judge. Do not escalate on this:
+                            // it is also what a stubbed play() looks like under test.
+                            status = 'unknown';
+                            detail = 'readyState=' + el.readyState;
+                        } else if (el.paused) {
+                            status = 'failed';
+                            detail = 'paused-immediately';
+                        } else if (el.currentTime <= t0) {
+                            status = 'failed';
+                            detail = 'currentTime-stalled';
+                        } else {
+                            status = 'ok';
+                        }
+                        resolve({ status: status, path: 'element', detail: detail });
+                    }, VERIFY_DELAY_MS);
+                });
+            }
+
+            function playViaTone(clip) {
+                const c = ensureCtx();
+                if (!c || c.state !== 'running') {
+                    return Promise.resolve({ status: 'failed', path: 'tone', detail: 'no-ctx' });
+                }
+                try {
+                    // Last resort: a synthesised pattern that needs no decoded media at all.
+                    const pulses = clip === 'bell30s' ? 2 : 5;
+                    const now = c.currentTime;
+                    for (let i = 0; i < pulses; i++) {
+                        const osc = c.createOscillator();
+                        const g = c.createGain();
+                        const at = now + i * 0.45;
+                        osc.type = 'square';
+                        osc.frequency.value = 880;
+                        g.gain.setValueAtTime(0.0001, at);
+                        g.gain.exponentialRampToValueAtTime(0.35, at + 0.02);
+                        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
+                        osc.connect(g);
+                        g.connect(c.destination);
+                        osc.start(at);
+                        osc.stop(at + 0.35);
+                    }
+                    return Promise.resolve({ status: 'ok', path: 'tone' });
+                } catch (e) {
+                    return Promise.resolve({ status: 'failed', path: 'tone', detail: String(e) });
+                }
+            }
+
+            const PATHS = ['buffer', 'element', 'tone'];
+
+            function runPath(name, clip, instance) {
+                const forced = window.__audioForce || {};
+                if (forced.failPrimary && name === 'buffer') {
+                    return Promise.resolve({ status: 'failed', path: 'buffer', detail: 'forced-failure' });
+                }
+                if (forced.failElement && name === 'element') {
+                    return Promise.resolve({ status: 'failed', path: 'element', detail: 'forced-failure' });
+                }
+                if (name === 'buffer') return playViaBuffer(clip);
+                if (name === 'element') return playViaElement(clip, instance);
+                return playViaTone(clip);
+            }
+
+            function attempt(clip, instance, idx) {
+                if (idx >= PATHS.length) {
+                    return Promise.resolve({ status: 'failed', path: 'none', detail: 'all-paths-failed' });
+                }
+                return runPath(PATHS[idx], clip, instance).then(function (r) {
+                    diag('ring.path', { clip: clip, instance: instance, path: r.path, status: r.status, detail: r.detail || null });
+                    // 'unknown' means we could not judge — it is not a reason to pile a
+                    // second sound on top of one that may well be playing fine.
+                    if (r.status === 'ok' || r.status === 'unknown') return r;
+                    return attempt(clip, instance, idx + 1);
+                });
+            }
+
+            function ring(clip, reason) {
+                const instance = ++instanceSeq;
+                lastRingAt = Date.now();
+                diag('ring', { clip: clip, instance: instance, reason: reason || 'alarm', armed: armed });
+                if (!armed) {
+                    lastResult = { status: 'failed', path: 'none', detail: 'not-armed' };
+                    diag('ring.result', { clip: clip, instance: instance, status: 'failed', detail: 'not-armed' });
+                    console.warn('[alarm] rotation reached with audio not armed — showing visual only');
+                    tryArm('ring');
+                    renderBadge();
+                    return Promise.resolve(lastResult);
+                }
+                return attempt(clip, instance, 0).then(function (r) {
+                    lastResult = r;
+                    diag('ring.result', { clip: clip, instance: instance, status: r.status, path: r.path, detail: r.detail || null });
+                    if (r.status === 'failed') {
+                        console.warn('[alarm] every audio path failed for ' + clip + ' (' + (r.detail || '') + ')');
+                    }
+                    renderBadge();
+                    return r;
+                });
+            }
+
+            // ---- device changes --------------------------------------------------
+            function onDeviceChange() {
+                diag('devicechange');
+                // Software equivalent of what the team does by hand with the Bluetooth
+                // dongle: tear the platform sink down and let it be rebuilt against the
+                // current default device. Needs no permission and no device enumeration.
+                if (ctx && typeof ctx.setSinkId === 'function') {
+                    stopKeepAliveNode();
+                    ctx.setSinkId({ type: 'none' }).then(function () {
+                        return ctx.setSinkId('');
+                    }).then(function () {
+                        diag('sink.roundtrip.ok');
+                        if (keepAliveWanted) startKeepAlive();
+                    }).catch(function (e) {
+                        diag('sink.roundtrip.failed', String(e));
+                        if (keepAliveWanted) startKeepAlive();
+                    });
+                }
+                // The output may now be a device nobody can hear. No code can tell;
+                // only an operator can, so stop claiming the sound is confirmed.
+                heardAt = null;
+                try { localStorage.removeItem(HEARD_KEY); } catch (e) { /* ignore */ }
+                renderBadge();
+            }
+
+            // ---- status badge ----------------------------------------------------
+            function hhmm(ts) {
+                if (!ts) return '--:--';
+                const d = new Date(ts);
+                return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+            }
+
+            function renderBadge() {
+                publish();
+                const banner = document.getElementById('audioArmBanner');
+                if (banner) banner.classList.toggle('visible', !armed);
+                if (document.body) document.body.classList.toggle('audio-unarmed', !armed);
+                const el = document.getElementById('audioBadge');
+                if (!el) return;
+                let cls, text;
+                if (!armed) {
+                    cls = 'state-bad';
+                    text = 'ALARM NOT ARMED — click to enable';
+                } else if (lastResult && lastResult.status === 'failed') {
+                    cls = 'state-bad';
+                    text = 'Alarm pipeline FAILED ' + hhmm(lastRingAt);
+                } else if (!heardAt || (Date.now() - heardAt) > CONFIRM_STALE_MS) {
+                    cls = 'state-warn';
+                    text = 'Sound not confirmed — tap to test';
+                } else {
+                    cls = 'state-ok';
+                    text = 'Alarm armed · heard ' + hhmm(heardAt) +
+                        (lastRingAt ? ' · last ring ' + hhmm(lastRingAt) : '');
+                }
+                el.className = 'audio-badge ' + cls;
+                el.textContent = text;
+            }
+
+            // ---- operator sound check ---------------------------------------------
+            function runSoundCheck() {
+                tryArm('soundcheck').then(function (ok) {
+                    if (!ok) { renderBadge(); return; }
+                    pendingCheck = true;
+                    diag('soundcheck.start');
+                    ring('bell30s', 'soundcheck');
+                    const dlg = document.getElementById('soundCheck');
+                    if (dlg) dlg.classList.add('visible');
+                });
+            }
+
+            function confirmHeard(yes) {
+                const dlg = document.getElementById('soundCheck');
+                if (dlg) dlg.classList.remove('visible');
+                pendingCheck = false;
+                diag('soundcheck.answer', { heard: !!yes });
+                if (yes) {
+                    heardAt = Date.now();
+                    try { localStorage.setItem(HEARD_KEY, String(heardAt)); } catch (e) { /* ignore */ }
+                } else {
+                    heardAt = null;
+                    try { localStorage.removeItem(HEARD_KEY); } catch (e) { /* ignore */ }
+                    lastResult = { status: 'failed', path: 'operator', detail: 'not-heard' };
+                    console.warn('[alarm] operator reports the test sound was NOT heard');
+                }
+                renderBadge();
+            }
+
+            // ---- diagnostics export -------------------------------------------------
+            function diagnosticsText() {
+                let stored = [];
+                try { stored = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (e) { stored = []; }
+                const bySeq = {};
+                stored.concat(log).forEach(function (e) { bySeq[e.t + '#' + e.seq] = e; });
+                const merged = Object.keys(bySeq)
+                    .map(function (k) { return bySeq[k]; })
+                    .sort(function (a, b) { return (a.t - b.t) || (a.seq - b.seq); });
+                const head = [
+                    'Speed Chat — alarm audio diagnostics',
+                    'exported: ' + new Date().toISOString(),
+                    'health: ' + JSON.stringify(window.__audioHealth),
+                    'session: ' + JSON.stringify(sessionHeader()),
+                    ''
+                ].join('\n');
+                return head + merged.map(function (e) {
+                    return e.iso + ' +' + e.perf + 'ms  ' + e.event +
+                        (e.detail == null ? '' : '  ' + JSON.stringify(e.detail));
+                }).join('\n') + '\n';
+            }
+
+            function downloadDiagnostics() {
+                const blob = new Blob([diagnosticsText()], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'speedchat-alarm-diagnostics-' +
+                    new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () {
+                    URL.revokeObjectURL(a.href);
+                    a.remove();
+                }, 0);
+            }
+
+            // ---- wiring -----------------------------------------------------------
+            const GESTURES = ['click', 'keydown', 'touchstart', 'pointerdown'];
+            function onGesture(ev) {
+                // Keep listening until arming is actually CONFIRMED. The old code removed
+                // the listeners after the first attempt, so one gesture the browser did not
+                // count as activation left the app permanently, silently un-armed.
+                tryArm(ev && ev.type ? ev.type : 'gesture');
+            }
+            GESTURES.forEach(function (evt) {
+                document.addEventListener(evt, onGesture, true);
             });
-            _audioUnlockEvents.forEach(evt => document.removeEventListener(evt, enableAudio));
-        }
-        _audioUnlockEvents.forEach(evt => document.addEventListener(evt, enableAudio, { once: false }));
 
-        // Get the duration of the alarm sounds and ensure they're loaded
-        bell.addEventListener('loadeddata', function () {
-            console.log('Main alarm sound loaded successfully');
-            alarmDuration = bell.duration * 1000; // Convert to milliseconds
-        });
+            document.addEventListener('visibilitychange', function () {
+                diag('visibilitychange', { hidden: document.hidden });
+                if (!document.hidden) tryArm('visibilitychange');
+            });
+            window.addEventListener('focus', function () { tryArm('focus'); });
 
-        bell.addEventListener('error', function (e) {
-            console.error('Error loading main alarm sound:', e);
-        });
+            if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+                navigator.mediaDevices.addEventListener('devicechange', onDeviceChange);
+            }
 
-        bell30s.addEventListener('loadeddata', function () {
-            console.log('30-second alarm sound loaded successfully');
-            alarm30sDuration = bell30s.duration * 1000; // Convert to milliseconds
-        });
+            ensureCtx();
+            loadClips();
+            // An un-armed page must say so immediately, not at the first missed rotation.
+            tryArm('startup');
+            setTimeout(renderBadge, 0);
+            setInterval(renderBadge, 30000);
+            publish();
 
-        bell30s.addEventListener('error', function (e) {
-            console.error('Error loading 30-second alarm sound:', e);
-        });
+            return {
+                ring: ring,
+                isArmed: function () { return armed; },
+                armFromGesture: function (source) { return tryArm(source || 'banner'); },
+                startKeepAlive: startKeepAlive,
+                stopKeepAlive: stopKeepAlive,
+                runSoundCheck: runSoundCheck,
+                confirmHeard: confirmHeard,
+                downloadDiagnostics: downloadDiagnostics,
+                diagnosticsText: diagnosticsText,
+                renderBadge: renderBadge,
+                diag: diag,
+                getLog: function () { return log.slice(); }
+            };
+        })();
+
+        // A top-level `const` is not a property of window, and several call sites guard on
+        // `window.AlarmAudio` so they stay safe if this block ever fails to evaluate.
+        window.AlarmAudio = AlarmAudio;
 
         // ========================================
         // Firebase Configuration and Initialization
@@ -1685,7 +2497,7 @@
                 try {
                     // Update global variables
                     TOTAL_SESSION_TIME = parseInt(newState.config.sessionDuration) * 60 * 1000;
-                    MS5 = parseInt(newState.config.alarmInterval) * 60 * 1000;
+                    setAlarmIntervalMs(parseInt(newState.config.alarmInterval) * 60 * 1000);
                     MAX_PEOPLE_PER_LINE = parseInt(newState.config.maxPeoplePerLine) || 10;
                     BLINK_TIME_MIN = parseInt(newState.config.blinkTime || "5");
                     FINISH_WINDOW_MIN = parseInt(newState.config.finishWindow || "5");
@@ -2035,77 +2847,108 @@
             toggleConfig();
         });
 
+        // Changing the alarm interval re-divides elapsed time, so a stored interval index
+        // would be reinterpreted against a new divisor. Re-baseline every line instead.
+        function setAlarmIntervalMs(ms) {
+            if (!ms || ms === MS5) { MS5 = ms || MS5; return; }
+            MS5 = ms;
+            Object.keys(alarmFired).forEach(function (k) { alarmFired[k] = undefined; });
+            Object.keys(warned30).forEach(function (k) { warned30[k] = undefined; });
+            if (window.AlarmAudio) AlarmAudio.diag('config.alarmInterval', { ms: ms });
+        }
+
+        // Single source of truth for "are alarms switched on". The main alarm used to read
+        // the checkbox while the 30-second warning read a localStorage-backed variable, so
+        // the two could disagree — and a silenced 30-second warning is what leaves a
+        // Bluetooth speaker asleep for the full five minutes before a rotation.
+        function alarmsOn() {
+            const toggle = document.getElementById('alarmToggle');
+            return toggle ? toggle.checked : alarmsEnabled;
+        }
+
+        // The overlay's lifetime is driven by its own timer and NEVER by the audio element's
+        // 'ended' event. The old code attached a one-shot 'ended' listener inside the play()
+        // resolve handler of a shared element: listeners accumulated over a multi-hour event,
+        // a stalled clip left the overlay up forever, and a later unrelated 'ended' could hide
+        // a freshly-shown banner.
+        // Long enough to outlast the 16s clip, so the banner never disappears while the alarm
+        // is still sounding. When audio could not be confirmed it stays up far longer, because
+        // then it is the only thing telling the room to rotate — but it still clears itself,
+        // so an unattended screen gets its countdown back.
+        const NOTIFICATION_MS = 18000;
+        const NOTIFICATION_FAILED_MS = 60000;
+        let _notificationTimer = null;
+
+        function hideChangeSeatNotification() {
+            if (_notificationTimer) { clearTimeout(_notificationTimer); _notificationTimer = null; }
+            const notification = document.getElementById('changeSeatNotification');
+            const overlay = document.getElementById('notificationOverlay');
+            if (notification) { notification.style.display = 'none'; notification.classList.remove('alarm-live'); }
+            if (overlay) { overlay.style.display = 'none'; overlay.classList.remove('alarm-live'); }
+        }
+
         function showChangeSeatNotification(force = false) {
-            // Check if alarms are enabled from the toggle (the manual button passes force=true to
-            // bypass it, matching the documented "works regardless of the toggle" behaviour).
-            const alarmToggle = document.getElementById('alarmToggle');
-            if (!force && alarmToggle && !alarmToggle.checked) return;
+            // The manual button passes force=true to bypass the toggle, matching the
+            // documented "works regardless of the toggle" behaviour.
+            if (!force && !alarmsOn()) return;
 
             const notification = document.getElementById('changeSeatNotification');
             const overlay = document.getElementById('notificationOverlay');
+            const sub = document.getElementById('changeSeatNotificationSub');
 
-            // Show the notification and overlay first
+            // Show the visual FIRST and make it unmissable. When the speaker is dead for a
+            // reason no code can see — wrong Windows output device, muted mixer channel —
+            // this is the only thing standing between the room and a nine-minute round.
+            if (_notificationTimer) { clearTimeout(_notificationTimer); _notificationTimer = null; }
             notification.style.display = 'block';
+            notification.classList.add('alarm-live');
             overlay.style.display = 'block';
+            overlay.classList.add('alarm-live');
+            if (sub) sub.textContent = '';
 
-            // Only try to play sound if audio is enabled
-            if (audioEnabled) {
-                // Reset and play the alarm sound
-                bell.currentTime = 0;
-
-                // Try to play the sound
-                const playPromise = bell.play();
-
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        console.log('Alarm sound started playing');
-                        // When the alarm finishes playing, hide the notification
-                        bell.addEventListener('ended', () => {
-                            console.log('Alarm sound finished playing');
-                            notification.style.display = 'none';
-                            overlay.style.display = 'none';
-                        }, { once: true });
-                    }).catch(error => {
-                        console.error('Error playing alarm:', error);
-                        // If there's an error playing the sound, hide the notification after 3 seconds
-                        setTimeout(() => {
-                            notification.style.display = 'none';
-                            overlay.style.display = 'none';
-                        }, 3000);
-                    });
+            AlarmAudio.ring('bell', force ? 'manual' : 'rotation').then(function (result) {
+                if (!sub) return;
+                if (result.status === 'failed') {
+                    sub.textContent = 'No sound — check the speaker. Click to dismiss.';
+                } else if (result.status === 'unknown') {
+                    sub.textContent = '';
                 }
-            } else {
-                // If audio is not enabled, just show the notification for 3 seconds
-                console.log('Audio not enabled yet, showing notification without sound');
-                setTimeout(() => {
-                    notification.style.display = 'none';
-                    overlay.style.display = 'none';
-                }, 3000);
-            }
+            });
+
+            _notificationTimer = setTimeout(function () {
+                _notificationTimer = null;
+                const health = window.__audioHealth || {};
+                const failed = health.lastResult && health.lastResult.status === 'failed';
+                if (!failed) { hideChangeSeatNotification(); return; }
+                // Audio failed: hold it much longer, then clear so the timers are readable again.
+                _notificationTimer = setTimeout(function () {
+                    _notificationTimer = null;
+                    hideChangeSeatNotification();
+                }, NOTIFICATION_FAILED_MS - NOTIFICATION_MS);
+            }, NOTIFICATION_MS);
         }
 
+        // Clicking the banner or backdrop dismisses it — needed because a failed alarm now
+        // deliberately stays on screen until a human acknowledges it.
+        document.addEventListener('DOMContentLoaded', function () {
+            const n = document.getElementById('changeSeatNotification');
+            const o = document.getElementById('notificationOverlay');
+            if (n) n.addEventListener('click', hideChangeSeatNotification);
+            if (o) o.addEventListener('click', hideChangeSeatNotification);
+        });
+
         function showThirtySecondAlarm() {
-            // Check if 30-second alarms are enabled
-            if (!alarmsEnabled) return;
+            if (!alarmsOn()) return;
 
-            // Only try to play sound if audio is enabled
-            if (audioEnabled) {
-                // Reset and play the 30-second alarm sound
-                bell30s.currentTime = 0;
-
-                // Try to play the sound
-                const playPromise = bell30s.play();
-
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        console.log('30-second alarm sound started playing');
-                    }).catch(error => {
-                        console.error('Error playing 30-second alarm:', error);
-                    });
-                }
-            } else {
-                console.log('Audio not enabled yet, cannot play 30-second alarm');
+            // The 30-second warning previously had no visual at all, and it does double duty:
+            // it is also what wakes a Bluetooth speaker that has been silent for five minutes.
+            const toast = document.getElementById('warn30Toast');
+            if (toast) {
+                toast.classList.add('visible');
+                setTimeout(function () { toast.classList.remove('visible'); }, 8000);
             }
+
+            AlarmAudio.ring('bell30s', 'warn30');
         }
 
         function playAlarmManually() {
@@ -2168,16 +3011,16 @@
             const line = config.id;
             let timer = null;
             try { timer = document.querySelector('.timer[data-line="' + CSS.escape(line) + '"]'); } catch (e) { timer = null; }
-            if (!timer) return;
+            if (!timer) return 'inactive';
             const countElement = timer.querySelector('.count');
-            if (!countElement) return;
+            if (!countElement) return 'inactive';
 
             const startT = scheduledTimes[line];
             if (!startT) {
                 // Not scheduled: clear any alarm state so a future schedule starts clean.
                 alarmFired[line] = undefined;
                 warned30[line] = undefined;
-                return;
+                return 'inactive';
             }
 
             const now = Date.now();
@@ -2267,11 +3110,22 @@
             }
             timer.classList.toggle('active', status === 'active');
             timer.classList.toggle('inactive', status === 'inactive');
+            return status;
         }
 
         function globalTick() {
+            let anyActive = false;
             for (let i = 0; i < lineConfigs.length; i++) {
-                try { tickOneLine(lineConfigs[i]); } catch (e) { console.error('tick error:', e); }
+                try {
+                    if (tickOneLine(lineConfigs[i]) === 'active') anyActive = true;
+                } catch (e) { console.error('tick error:', e); }
+            }
+            // Hold the output stream open for as long as a round is running. Chromium swaps
+            // in a fake sink when it is fed silence, and re-opening costs a Bluetooth speaker
+            // seconds of A2DP restart — long enough to eat the start of the alarm.
+            if (window.AlarmAudio) {
+                if (anyActive) AlarmAudio.startKeepAlive();
+                else AlarmAudio.stopKeepAlive();
             }
         }
 
@@ -2527,7 +3381,7 @@
             AUTO_RESCHEDULE_MIN = document.getElementById('autoReschedule').value;
 
             TOTAL_SESSION_TIME = sessionMinutes * 60 * 1000;
-            MS5 = alarmMinutes * 60 * 1000;
+            setAlarmIntervalMs(alarmMinutes * 60 * 1000);
 
             // Granular write of just the scalar config fields (never touches lines/queues).
             writeConfigScalars();
@@ -2581,7 +3435,7 @@
                 lineConfigs = [];
                 scheduledTimes = {};
                 TOTAL_SESSION_TIME = 30 * 60 * 1000;
-                MS5 = 5 * 60 * 1000;
+                setAlarmIntervalMs(5 * 60 * 1000);
                 FINISH_WINDOW_MIN = 5;
                 MAX_PEOPLE_PER_LINE = 10;
                 BLINK_TIME_MIN = 5;
@@ -2617,18 +3471,24 @@
             resetApplication();
         });
 
-        // Add this after the DOMContentLoaded event listener
-        document.addEventListener('DOMContentLoaded', function () {
-            // Set initial toggle state from localStorage
+        // Run as soon as the DOM is usable, whether or not DOMContentLoaded is still
+        // pending. alarmsOn() reads the checkbox, so the checkbox must carry the stored
+        // preference before the first rotation — not merely at some later event.
+        function initAlarmToggle() {
             const alarmToggle = document.getElementById('alarmToggle');
+            if (!alarmToggle) return;
             alarmToggle.checked = alarmsEnabled;
-
-            // Add event listener for toggle changes
             alarmToggle.addEventListener('change', function () {
                 alarmsEnabled = this.checked;
                 localStorage.setItem('alarmsEnabled', alarmsEnabled);
+                if (window.AlarmAudio) AlarmAudio.diag('config.alarmToggle', { on: alarmsEnabled });
             });
-        });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAlarmToggle);
+        } else {
+            initAlarmToggle();
+        }
 
         // Update the wait queue indicator on the main UI
         function updateWaitQueueIndicator() {

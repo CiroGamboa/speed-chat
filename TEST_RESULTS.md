@@ -52,6 +52,46 @@ Command: `RUN_AGAINST_PROD=1 npx playwright test`.
 prod Firebase — the true end-to-end post-deploy run:
 `RUN_AGAINST_PROD=1 BASE_URL=https://cirogamboa.github.io/speed-chat npx playwright test`.
 
+## Alarm audio run — 18/18 passed (2.2m)
+
+Added after several events where the rotation banner appeared on time but the speaker stayed
+silent, and nobody could tell it had broken. Root cause: browsers block audio until the page is
+clicked, and the password modal is skipped once `localStorage` records a verified password — so a
+venue screen that is left untouched can run all night without ever being allowed to make a sound.
+Re-pairing the Bluetooth speaker "fixed" it because walking over and clicking the Chrome window
+*is* the gesture the browser was waiting for.
+
+```
+✓ 7  alarm still fires at the interval boundary under churn        fires      (25.6s)
+✓ 8  manual alarm plays even when the toggle is OFF                 plays      (2.7s)
+✓ 11 a screen nobody clicks says out loud it cannot make a sound    warns      (2.2s)
+✓ 12 the toggle gates the 30s warning and the alarm together        unified    (3.6s)
+✓ 13 the banner outlives the audio element, ignores stray 'ended'   holds      (6.4s)
+✓ 14 every ring builds a fresh playback instance                    3 distinct (5.4s)
+✓ 15 a device change is logged, recovered, and un-confirms sound    recovers   (2.3s)
+✓ 16 keep-alive runs while a round is active, stops when none is    lifecycle  (3.9s)
+✓ 17 a dead primary path escalates instead of going silent          escalates  (3.2s)
+✓ 18 the diagnostics log survives a reload                          persists   (4.0s)
++ the 8 pre-existing sync/resilience/soak scenarios, all still green.
+```
+
+Command: `TEST_PORT=8111 RUN_AGAINST_PROD=1 npx playwright test` → 18 passed (2.2m).
+
+The suite is sensitive to network conditions: during this work several runs failed wholesale with
+`UND_ERR_CONNECT_TIMEOUT` against `chill-speed-chat-default-rtdb.firebaseio.com`, and a stale
+server left on port 8080 by an interrupted run produced cascades of `ERR_CONNECTION_REFUSED`.
+Neither is an app fault. `TEST_PORT` now exists so a stuck port can be stepped around; if a run
+fails broadly, check Firebase reachability before suspecting the code.
+
+### What these tests cannot cover
+
+Real audibility is not provable from a browser — nothing in JS can see the Windows per-app volume
+mixer, which endpoint the audio actually landed on, or whether the speaker is awake. So the suite
+proves the pipeline runs, escalates and reports; it does **not** prove a noise reached the room.
+That is what the operator's **Test sound → did you hear it?** check is for, and why the status
+badge never claims "sound OK" on its own. Also untested headless, by design: WASAPI rebinding,
+the `setSinkId` round-trip, and Bluetooth standby/wake latency. See `AUDIO_TROUBLESHOOTING.md`.
+
 ## Note on the capacity guard
 
 The plan called for a Firebase transaction to enforce the per-line cap under concurrency. Real testing
