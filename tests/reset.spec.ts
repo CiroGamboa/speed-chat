@@ -21,11 +21,10 @@ function track(a: Actor): Actor { actors.push(a); return a; }
 const resetButton = (a: Actor) => a.page.locator('.reset-btn', { hasText: 'Reset All Settings' });
 
 test('32. Reset All Settings asks exactly once', async ({ browser }) => {
-  test.fail(); // Expected failure until the double-binding is removed. Flip this then.
-  //
-  // The button is bound TWICE: inline onclick="resetApplication()" at index.html:1563, and again
-  // via addEventListener at index.html:3681. One click therefore raises two identical confirms,
-  // and an operator who means to cancel has to say no twice -- saying no then yes still resets.
+  // Regression test for a double-binding: the button carried BOTH an inline
+  // onclick="resetApplication()" and an addEventListener calling the same function, so one click
+  // raised two identical confirms. An operator who meant to cancel had to say no twice, and
+  // no-then-yes still wiped the event. The listener was removed; the inline attribute remains.
   const admin = track(await Actor.create(browser, { label: 'admin', role: 'admin' }));
   await ensureLines(admin, 1);
 

@@ -175,10 +175,16 @@ test('23. bulk promote fills the line to capacity and leaves the rest queued', a
 test('24. bulk promote onto a full line alerts and moves nobody', async ({ browser }) => {
   const admin = track(await Actor.create(browser, { label: 'admin', role: 'admin' }));
   const [lineId] = await ensureLines(admin, 1);
+  // Wait for the DATABASE to hold the new capacity, as in test 23: a snapshot arriving inside the
+  // 400ms debounce reverts MAX_PEOPLE_PER_LINE to the stored value. This test passed before the
+  // #maxPeople default was fixed only because the seeded default was ALSO 1, so the race was
+  // invisible; with a sane default of 10 it promoted both people and the alert never fired.
   await admin.setMaxPeople(1);
+  await waitFor(() => oracle.read('config/maxPeoplePerLine'), (v) => v === '1', 10_000);
 
   for (const name of ['Ann', 'Bob']) await admin.addGeneralQueuePerson(name);
   await waitFor(() => oracle.generalQueue(), (q) => q.length === 2, 10_000);
+  await expect(rows(admin)).toHaveCount(2);
 
   await admin.page.locator('#bulkPromoteButtons button').first().click();
   await waitFor(() => oracle.lines(), (ls) => (ls.find((l) => l.id === lineId)?.people.length ?? 0) === 1, 10_000);
@@ -195,16 +201,13 @@ test('24. bulk promote onto a full line alerts and moves nobody', async ({ brows
   expect(await oracle.generalQueue()).toHaveLength(1);
 });
 
-// EXPECTED FAILURE until the one-word fix in Stage 2. Flip this to a normal test then.
-//
-// #maxPeople is the only one of the six config selects with no `selected` attribute on any option
-// (sessionDuration, alarmInterval, finishWindow, blinkTime and autoReschedule all have one), so
-// the browser falls back to its FIRST option -- value "1". currentScalars() reads that select
-// straight off the DOM (index.html:2499), so a freshly seeded database gets
-// maxPeoplePerLine: "1", and every line caps at a single person until an admin notices and
-// changes the setting by hand. Adding a second person alerts "Maximum number of people (1)".
+// Regression test. #maxPeople was the only one of the six config selects with no `selected`
+// attribute on any option (sessionDuration, alarmInterval, finishWindow, blinkTime and
+// autoReschedule all had one), so the browser fell back to its FIRST option -- value "1".
+// currentScalars() reads that select straight off the DOM when seeding, so a fresh database got
+// maxPeoplePerLine: "1" and every line capped at a single person until an admin noticed and
+// changed the setting by hand; adding a second person alerted "Maximum number of people (1)".
 test('25. a freshly seeded database does not cap every line at one person', async ({ browser }) => {
-  test.fail(); // must be INSIDE the test: at file scope it marks every test in the file
   const admin = track(await Actor.create(browser, { label: 'admin', role: 'admin' }));
   await ensureLines(admin, 1);
 

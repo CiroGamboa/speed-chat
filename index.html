@@ -1482,7 +1482,7 @@
                     <option value="7">7 people</option>
                     <option value="8">8 people</option>
                     <option value="9">9 people</option>
-                    <option value="10">10 people</option>
+                    <option value="10" selected>10 people</option>
                     <option value="11">11 people</option>
                     <option value="12">12 people</option>
                     <option value="13">13 people</option>
@@ -3387,7 +3387,21 @@
             }
         }
 
-        // Wait Queue Management Functions
+        // PER-LINE wait queue — DORMANT. Do not delete, and do not mistake it for live code.
+        //
+        // These five functions run and persist real data under config/lines/<id>/waitQueue, but NO
+        // renderer emits their UI: nothing in the app produces the #newWaitQueuePerson<lineId>
+        // input they read, or any button that calls them. The GENERAL queue
+        // (renderGeneralWaitQueue, #generalWaitQueueList) is the queue that actually ships.
+        //
+        // They are reachable only as window.addToWaitQueue(...) etc., and tests/sync.spec.ts
+        // test 4 drives exactly that path as its proof that a granular write to one subtree does
+        // not clobber a sibling — so deleting them breaks the suite, not just a dead feature.
+        //
+        // Note the CSS split: .wait-queue-entry, .add-wait-queue, .wait-queue-management,
+        // .wait-queue-list, .wait-queue-title and .wait-queue-count are all LIVE (the general
+        // queue reuses them). Only .wait-queue-panel and .promote-button were written for the UI
+        // that never shipped.
         function addToWaitQueue(lineId) {
             if (currentRole === 'viewer') return;
             const config = lineConfigs.find(c => c.id === lineId);
@@ -3677,11 +3691,18 @@
             }
         }
 
-        // Add event listener for the reset button
-        document.querySelector('.reset-btn').addEventListener('click', function (e) {
-            e.preventDefault();
-            resetApplication();
-        });
+        // The reset button is wired by its inline onclick="resetApplication()" (in .form-buttons)
+        // and nothing else. There used to be an addEventListener here as well, which meant one
+        // click raised TWO identical confirms: an operator who meant to cancel had to say no
+        // twice, and no-then-yes still wiped the event.
+        //
+        // The listener was the wrong half to keep, for two reasons beyond the double prompt. It
+        // selected its target with document.querySelector('.reset-btn'), which resolves by DOM
+        // ORDER -- and "Download alarm diagnostics" shares that class for styling, so reordering
+        // the two buttons would have silently turned the diagnostics button into a one-click wipe.
+        // It would also have thrown at load if the button ever moved inside a role-gated branch,
+        // since updateUIBasedOnRole() hides .form-buttons for non-admins. The inline attribute has
+        // neither problem. See tests/reset.spec.ts tests 32 and 35.
 
         // Run as soon as the DOM is usable, whether or not DOMContentLoaded is still
         // pending. alarmsOn() reads the checkbox, so the checkbox must carry the stored
