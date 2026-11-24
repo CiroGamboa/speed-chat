@@ -2986,14 +2986,23 @@
         // on the line jumped to an unrelated slot. Between 22:00 and midnight -- prime event time
         // for this app -- the last stretch of the dropdown was therefore unusable.
         //
-        // A time more than twelve hours in the past is always the wrong day, so it is tomorrow's.
-        // Nothing in the app ever offers a slot further than two hours out, so a wrapped choice is
-        // at least twenty-two hours "past" and is caught comfortably.
+        // So the label is resolved to the occurrence NEAREST to now, in either direction: more
+        // than twelve hours away is the wrong day.
         //
-        // Deliberately one-directional. A naive time far in the FUTURE can only come from stale
-        // stored data, never from anything the UI can produce, and rewriting those to yesterday
-        // would change how an old config reads for no benefit here. Leaving them alone keeps this
-        // fix to the case that is actually broken.
+        // BOTH directions matter, and for the same reason -- an event that runs across midnight.
+        //
+        //   forward   a 00:05 slot chosen at 23:32 is tomorrow's, not 23.5 hours ago
+        //   backward  a line that STARTED at 23:30, read at 00:10, is yesterday's 23:30 and has
+        //             twenty minutes left to run -- not today's 23:30, twenty-three hours away
+        //
+        // The backward case was missed on the first pass here, on the reasoning that a naive
+        // future time could only come from stale stored data. That was wrong: it happens to every
+        // running line once the clock passes midnight, which for this app is routine. The card
+        // would have read "Starting in 1400 min" in the middle of a live round.
+        //
+        // Nothing in the app ever offers a slot further than two hours out and no session runs
+        // longer than an hour, so twelve hours is far outside anything legitimate in either
+        // direction, and a line that started two hours ago is left exactly where it is.
         function parseTime(hm) {
             const [h, m] = hm.split(':').map(Number);
             const now = serverNow();
@@ -3002,6 +3011,7 @@
             let t = d.getTime();
             const DAY = 24 * 60 * 60 * 1000;
             if (now - t > DAY / 2) t += DAY;
+            else if (t - now > DAY / 2) t -= DAY;
             return t;
         }
 

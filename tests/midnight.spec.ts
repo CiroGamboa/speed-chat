@@ -64,6 +64,46 @@ test('61. a genuinely recent past time stays in the past', async ({ browser }) =
   expect(now - at).toBeLessThan(3 * HOUR);
 });
 
+test('61b. a label thirteen hours "ahead" is read as yesterday, not as far future', async ({ browser }) => {
+  // The mirror of test 60, and the case the first attempt at this fix missed. A line that STARTED
+  // at 23:30 and is read at 00:10 must be yesterday's 23:30 with twenty minutes left to run, not
+  // today's 23:30 twenty-three hours away -- otherwise a live round displays "Starting in 1400
+  // min". Expressed as an offset so it exercises the same arithmetic at every hour.
+  const admin = track(await Actor.create(browser, { label: 'admin', role: 'admin', query: 'diag=1' }));
+
+  const label = await hhmmOffsetFromServer(admin, 13 * 60);
+  const { at, now } = await resolve(admin, label);
+
+  expect(at).toBeLessThan(now);
+  expect(now - at).toBeGreaterThan(10 * HOUR);
+  expect(now - at).toBeLessThan(12 * HOUR);
+});
+
+test('61c. a line that started before midnight keeps counting down after it', async ({ browser }) => {
+  // End to end, and the reason any of this matters: the round in progress when the clock rolls
+  // over must keep its countdown rather than flipping to "Starting in ...".
+  const admin = track(await Actor.create(browser, { label: 'admin', role: 'admin', query: 'diag=1' }));
+  const [lineId] = await ensureLines(admin, 1);
+  await oracle.patchConfig({ sessionDuration: '60', finishWindow: '5', autoReschedule: 'off' });
+
+  // Started 20 minutes ago, whatever the hour -- which is "yesterday" once past midnight.
+  const started = await hhmmOffsetFromServer(admin, -20);
+  await oracle.putValue(`config/lines/${lineId}/time`, started);
+  await admin.page.waitForTimeout(1200);
+
+  const countEl = admin.page.locator('#timers-container .timer .count');
+  await expect(countEl).toHaveText(/^\d{2}:\d{2}$/);
+  await expect(countEl).not.toContainText('Starting in');
+  await expect(admin.page.locator('#timers-container .timer').first())
+    .toHaveClass(/(?:^|\s)active(?:$|\s)/);
+
+  // ~40 minutes left of a 60-minute session.
+  const remaining = (await countEl.textContent())!.trim();
+  const mins = Number(remaining.slice(0, 2));
+  expect(mins).toBeGreaterThan(35);
+  expect(mins).toBeLessThan(41);
+});
+
 test('62. a near-future time is untouched', async ({ browser }) => {
   const admin = track(await Actor.create(browser, { label: 'admin', role: 'admin', query: 'diag=1' }));
 
