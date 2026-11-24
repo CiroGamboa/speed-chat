@@ -2,6 +2,7 @@
 // Handles the password gate, expands the admin config panel, instruments audio (so we can prove the
 // alarm "sounded" headlessly), captures console/page errors, and exposes network-chaos controls.
 import { Browser, BrowserContext, Page, CDPSession } from '@playwright/test';
+import { stateNs } from './dbOracle';
 
 const PASSWORD = 'speedchat2025';
 const APP_PAGE = process.env.APP_PAGE || '/';
@@ -49,7 +50,12 @@ export class Actor {
 
     a.cdp = await a.context.newCDPSession(a.page);
 
-    const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}${opts.query ? '&' + opts.query : ''}`;
+    // Point the app at the same DB namespace the oracle asserts against. Appended here rather than
+    // left to each spec so no scenario can silently fall back to the live /state node.
+    const url =
+      `${BASE_URL}${APP_PAGE}?role=${opts.role}` +
+      `&stateNs=${encodeURIComponent(stateNs())}` +
+      `${opts.query ? '&' + opts.query : ''}`;
     await a.page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // Dismiss the password modal if present.

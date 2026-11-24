@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// All scenarios share the single real /state node, so tests MUST run serially (no parallelism).
+// All scenarios share one DB namespace (see tests/global-setup.ts), so tests MUST run serially.
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
@@ -13,7 +13,9 @@ export default defineConfig({
   globalTeardown: './tests/global-teardown.ts',
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:8080',
-    trace: 'on',
+    // Stage 1 roughly triples the test count; a trace per passing test is a lot of disk for
+    // nothing. Failures still get a full trace.
+    trace: 'retain-on-failure',
     video: 'off',
     headless: true,
     actionTimeout: 15_000,

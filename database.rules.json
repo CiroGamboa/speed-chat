@@ -7,6 +7,14 @@
       "log": {
         ".indexOn": ["at"]
       }
+    },
+    "$testNs": {
+      ".read": "$testNs.beginsWith('test_')",
+      ".write": "$testNs.beginsWith('test_') && auth != null",
+      ".validate": "newData.hasChildren(['timestamp', 'config'])",
+      "log": {
+        ".indexOn": ["at"]
+      }
     }
   }
 }

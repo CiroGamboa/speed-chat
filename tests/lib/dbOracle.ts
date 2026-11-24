@@ -6,9 +6,23 @@
 // and the legacy array structure (unfixed app), so the same assertions work in before/after runs.
 
 export const DB_BASE = 'https://chill-speed-chat-default-rtdb.firebaseio.com';
-// The app the tests drive uses the real /state path (per the chosen prod target). Override with
-// STATE_NS if you ever want isolation (would require a matching security rule for that path).
-export const STATE_NS = process.env.STATE_NS || 'state';
+// Which top-level DB namespace the suite reads and writes.
+//
+// Read LAZILY, on every call, and never cached: `tests/global-setup.ts` assigns a per-run
+// `test_<id>` namespace into process.env BEFORE the workers fork, and a module-level const would
+// have been frozen to 'state' at import time (global-setup imports this module itself).
+//
+// The app mirrors this via its `?stateNs=` parameter (getStateNamespace(), index.html:1464), whose
+// validation is /^[A-Za-z0-9_-]{1,64}$/ — so a namespace is a FLAT top-level key like
+// `test_a1b2c3`, never a path. `database.rules.json` grants access to any key beginning `test_`.
+export function stateNs(): string {
+  return process.env.STATE_NS || 'state';
+}
+
+/** True when we are pointed at the live event data rather than a throwaway test namespace. */
+export function isProdNs(): boolean {
+  return stateNs() === 'state';
+}
 
 const API_KEY = 'AIzaSyDWcpXD5jJgq-7l8N6JRoaZu0FbZTy7jh4';
 
@@ -38,7 +52,7 @@ async function authToken(): Promise<string | null> {
 
 async function url(path: string, needsAuth: boolean): Promise<string> {
   const p = path ? '/' + path.replace(/^\/+/, '') : '';
-  let u = `${DB_BASE}/${STATE_NS}${p}.json`;
+  let u = `${DB_BASE}/${stateNs()}${p}.json`;
   if (needsAuth) {
     const t = await authToken();
     if (t) u += `?auth=${t}`;

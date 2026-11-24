@@ -20,6 +20,9 @@ const TYPES = {
   '.mp3': 'audio/mpeg',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  // Same-origin fonts load without this, but an unknown type logs a console warning that
+  // Actor's error capture would report as an app error.
+  '.woff2': 'font/woff2',
 };
 
 const server = http.createServer(async (req, res) => {
