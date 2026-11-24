@@ -2976,11 +2976,33 @@
             return options;
         }
 
+        // Resolve a bare "HH:MM" wall-clock label to a timestamp.
+        //
+        // The label carries no date, so it has to be placed on one. Placing it on TODAY -- which
+        // is all this did -- breaks across midnight: generateTimeOptions() offers slots two hours
+        // ahead and happily crosses into the next day, so a 00:05 slot offered at 23:32 resolved
+        // to 23.5 hours in the PAST. The line was then immediately "expired": with auto-reschedule
+        // off its time was cleared, so the operator's selection silently blanked out, and with it
+        // on the line jumped to an unrelated slot. Between 22:00 and midnight -- prime event time
+        // for this app -- the last stretch of the dropdown was therefore unusable.
+        //
+        // A time more than twelve hours in the past is always the wrong day, so it is tomorrow's.
+        // Nothing in the app ever offers a slot further than two hours out, so a wrapped choice is
+        // at least twenty-two hours "past" and is caught comfortably.
+        //
+        // Deliberately one-directional. A naive time far in the FUTURE can only come from stale
+        // stored data, never from anything the UI can produce, and rewriting those to yesterday
+        // would change how an old config reads for no benefit here. Leaving them alone keeps this
+        // fix to the case that is actually broken.
         function parseTime(hm) {
             const [h, m] = hm.split(':').map(Number);
-            const d = new Date(serverNow());
+            const now = serverNow();
+            const d = new Date(now);
             d.setHours(h, m, 0, 0);
-            return d.getTime();
+            let t = d.getTime();
+            const DAY = 24 * 60 * 60 * 1000;
+            if (now - t > DAY / 2) t += DAY;
+            return t;
         }
 
         document.getElementById('scheduleForm').addEventListener('submit', function (e) {
