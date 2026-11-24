@@ -1477,8 +1477,8 @@
         //  - Under the current public rules it's not required — if the Anonymous provider is not
         //    enabled, sign-in fails, we log it, and everything still works.
         //  - Once the locked-down rules ('.write': 'auth != null') are published AND the Anonymous
-        //    provider is enabled in the Firebase console, the SDK automatically attaches the auth
-        //    token to database writes, so writes keep working with no further code changes.
+        //    provider is enabled in the Firebase console, the SDK attaches the auth token to
+        //    database writes -- but NOT to writes issued before sign-in resolves (see dbWrite).
         // Writes that must satisfy the rule (e.g. seeding) wait on `authReady` first.
         let authReady = Promise.resolve();
 
@@ -1499,6 +1499,38 @@
         } catch (error) {
             console.error('Error initializing Firebase:', error);
             alert('Failed to initialize Firebase. Please check your configuration.');
+        }
+
+        // ========================================
+        // Write gate: surviving the pre-sign-in window
+        // ========================================
+        // Anonymous sign-in takes roughly 0.5-1s after a page load, and the SDK does NOT hold a
+        // write until the token is attached. Measured against the live locked-down rules: a write
+        // issued at t=410ms was DENIED at t=777ms, while sign-in only resolved at t=1039ms. The
+        // password is cached in localStorage, so a returning device skips the modal and can click
+        // inside that window -- the schedule-form save is the likeliest victim, since it is the
+        // first thing an admin clicks when setting up.
+        //
+        // Rather than delay every write, issue it immediately and retry ONCE, only when it was
+        // rejected for permission WHILE sign-in was still in flight. The happy path is therefore
+        // untouched: same call, same ordering, same timing, no extra microtask. Every write routed
+        // through here is idempotent (a client-generated unique key, or a set/update of a value
+        // computed before the call), so a retry cannot duplicate or reorder anything.
+        let _authSettled = false;
+        authReady.finally(function () { _authSettled = true; });
+
+        function dbWrite(thunk) {
+            const p = thunk();   // runs NOW, so DOM reads inside the caller stay synchronous
+            if (!p || typeof p.catch !== 'function') return p;
+            return p.catch(function (err) {
+                const code = String((err && (err.code || err.message)) || '').toUpperCase();
+                if (code.indexOf('PERMISSION_DENIED') !== -1 && !_authSettled) {
+                    console.warn('Write rejected before sign-in completed; retrying after auth.');
+                    // .catch here so a FAILED sign-in still lets the retry through (public rules).
+                    return authReady.catch(function () { }).then(thunk);
+                }
+                throw err;
+            });
         }
 
         // ========================================
@@ -1974,7 +2006,7 @@
             // Client-generated unique key (never collides across devices, unlike length+1).
             const lineId = newId();
             // Granular write: create only this line node. Other devices' lines are untouched.
-            lineRef(lineId).set({ name: `Line ${nextNumber}`, time: '', order: nextOrder }).catch(handleWriteError);
+            dbWrite(() => lineRef(lineId).set({ name: `Line ${nextNumber}`, time: '', order: nextOrder })).catch(handleWriteError);
             // UI updates arrive via the Firebase listener.
         }
 
@@ -2118,7 +2150,8 @@
                 updates['config/lines/' + config.id + '/time'] = timeSelect.value;
             });
             if (currentRole !== 'viewer' && Object.keys(updates).length) {
-                stateRef.update(updates).catch(handleWriteError);
+                // The setup click most likely to land inside the pre-sign-in window.
+                dbWrite(() => stateRef.update(updates)).catch(handleWriteError);
             }
 
             updateTimers();
@@ -2453,7 +2486,8 @@
             const personId = newId();
             // Granular write to a UNIQUE key: never clobbers a concurrent add, and RTDB caches it
             // while offline and flushes it on reconnect.
-            lineRef(lineId).child('people/' + personId).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            const personEntry = { name: name, ts: Date.now() };   // hoisted so a retry writes the SAME payload
+            dbWrite(() => lineRef(lineId).child('people/' + personId).set(personEntry)).catch(handleWriteError);
 
             input.value = '';
             // UI updates arrive via the Firebase listener.
@@ -2493,7 +2527,8 @@
 
             const personId = newId();
             // Granular write: only this line's waitQueue subtree (never touches the general queue).
-            lineRef(lineId).child('waitQueue/' + personId).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            const queueEntry = { name: name, ts: Date.now() };    // hoisted so a retry writes the SAME payload
+            dbWrite(() => lineRef(lineId).child('waitQueue/' + personId).set(queueEntry)).catch(handleWriteError);
             input.value = '';
         }
 
@@ -2699,7 +2734,8 @@
             if (_configWriteTimer) clearTimeout(_configWriteTimer);
             _configWriteTimer = setTimeout(() => {
                 _configWriteTimer = null;
-                stateRef.child('config').update(currentScalars()).catch(handleWriteError);
+                const scalars = currentScalars();                 // snapshot, so a retry is not a second read
+                dbWrite(() => stateRef.child('config').update(scalars)).catch(handleWriteError);
             }, 400);
         }
 
@@ -2848,7 +2884,9 @@
             const input = document.getElementById('newGeneralWaitQueuePerson');
             const name = input.value.trim();
             if (!name) return;
-            generalQueueRef().child(newId()).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            const generalEntry = { name: name, ts: Date.now() };  // hoisted so a retry writes the SAME payload
+            const generalId = newId();                            // and to the SAME key
+            dbWrite(() => generalQueueRef().child(generalId).set(generalEntry)).catch(handleWriteError);
             input.value = '';
         }
 
