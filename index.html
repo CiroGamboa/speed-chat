@@ -6,13 +6,78 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Speed Chat Timers</title>
     <style>
+        /* ------------------------------------------------------------------
+           Design tokens, hand-ported from chill-portal/frontend/src/app/globals.css.
+           Names are kept identical to the portal so the two codebases share one
+           vocabulary; values are the exact sRGB of the portal's oklch tokens, because
+           this stylesheet has no build step and an unsupported oklch() would resolve
+           to the guaranteed-invalid value at an event, with no way to debug from the floor.
+
+           The semantic layer below the brand block is what the rules actually reference,
+           so the whole theme is these ~25 values rather than 167 call sites.
+           ------------------------------------------------------------------ */
+        :root {
+            /* brand — copied verbatim from the portal */
+            --brand-pink:        #ff66c4;
+            --brand-pink-light:  #ff97d7;
+            --brand-pink-muted:  #cb519c;
+            --brand-pink-dark:   #8f0057;
+            --brand-peach:       #fcaa6f;
+            --brand-plum:        #6f1b48;
+
+            /* surfaces — portal oklch converted to sRGB */
+            --background:        #030303;   /* oklch(0.1 0 0)      */
+            --surface-raised:    #0d0d0d;   /* oklch(0.16 0 0) card */
+            --surface-sunken:    #141414;
+            --secondary:         #1b1b1b;   /* oklch(0.22 0 0)     */
+
+            /* text */
+            --text-body:         #fafafa;   /* oklch(0.985 0 0) — 18.6:1 on card */
+            --text-accent:       #ff97d7;   /* 9.87:1 on card. NEVER --brand-pink-dark:
+                                               #8f0057 as text on dark is 2.13:1      */
+            --text-subtle:       #a1a1a1;
+
+            /* actions */
+            --primary:           #ef6dc9;   /* oklch(0.72 0.19 340) */
+            --on-accent:         #1a0010;   /* 7.32:1 on --primary. The portal ships white
+                                               here, which is 2.73:1 and fails AA.      */
+            --action-bg:         var(--primary);
+            --action-bg-hover:   var(--brand-pink-light);
+            --action-muted-bg:   var(--secondary);
+
+            /* the one job #8f0057 keeps: a loud surface, white on it is 9.11:1 */
+            --alarm-bg:          var(--brand-pink-dark);
+            --alarm-fg:          #ffffff;
+
+            --border:            rgba(255, 255, 255, 0.12);
+            --ring:              var(--primary);
+
+            /* status, used by the alarm diagnostics panel */
+            --ok-bg:             #0f2417;
+            --ok-fg:             #7ee2a8;
+            --ok-border:         #1e6b33;
+            --warn-bg:           #2a1f0a;
+            --warn-fg:           #f0c070;
+            --warn-border:       #8a5200;
+            --danger-bg:         #2a0d10;
+            --danger-fg:         #ff8a8a;
+            --danger-border:     #7a0016;
+            --destructive:       #ff6467;   /* oklch(0.704 0.191 22.216) */
+
+            --radius:            0.75rem;
+            --radius-sm:         0.45rem;
+            --radius-md:         0.6rem;
+
+            --shadow-1:          0 2px 6px rgb(0 0 0 / 0.6);
+            --shadow-2:          0 4px 14px rgb(0 0 0 / 0.7);
+        }
         body {
             font-family: sans-serif;
-            background: linear-gradient(135deg, #ff97d7 0%, #fafafa 50%, #ff97d7 100%);
+            background: linear-gradient(135deg, #140a12 0%, var(--background) 45%, #140a12 100%);
             background-attachment: fixed;
             margin: 0;
             padding: 1rem;
-            color: #4a4949;
+            color: var(--text-body);
             font-size: 16px;
             min-height: 100vh;
         }
@@ -23,10 +88,10 @@
             margin: 0 auto 1rem;
             padding: 1.5rem;
             border-radius: 8px;
-            background: #fff;
+            background: var(--surface-raised);
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
-            border: 2px solid #ff97d7;
+            border: 2px solid var(--border);
             height: auto;
             min-height: 120px;
         }
@@ -66,7 +131,7 @@
             cursor: pointer;
             padding: 0.5rem;
             border-radius: 50%;
-            background: #fff;
+            background: var(--surface-raised);
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             width: 48px;
             height: 48px;
@@ -74,22 +139,22 @@
             align-items: center;
             justify-content: center;
             transition: transform 0.3s ease;
-            border: 2px solid #ff97d7;
+            border: 2px solid var(--border);
         }
 
         .config-header:hover {
             transform: rotate(45deg);
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .config-header.open {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .gear-icon {
             width: 24px;
             height: 24px;
-            stroke: #8f0057;
+            stroke: var(--text-accent);
             stroke-width: 2;
             pointer-events: none;
         }
@@ -106,7 +171,7 @@
             z-index: 1001;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
-            background: #fff;
+            background: var(--surface-raised);
             display: none;
         }
 
@@ -145,8 +210,8 @@
                 height: 48px;
                 z-index: 3000;
                 display: flex !important;
-                background: #fff;
-                border: 2px solid #ff97d7;
+                background: var(--surface-raised);
+                border: 2px solid var(--border);
                 pointer-events: auto;
             }
 
@@ -162,7 +227,7 @@
             .gear-icon {
                 width: 24px;
                 height: 24px;
-                stroke: #8f0057;
+                stroke: var(--text-accent);
                 stroke-width: 2;
                 pointer-events: none;
             }
@@ -259,7 +324,7 @@
                 border-radius: 8px;
                 box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
                 padding: 1.5rem;
-                background: #fff;
+                background: var(--surface-raised);
                 z-index: 1999;
             }
 
@@ -297,41 +362,41 @@
             width: 200px;
             margin-top: 0.5rem;
             padding: 0.75rem;
-            background: #fff;
+            background: var(--surface-raised);
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
-            border: 2px solid #ff97d7;
+            border: 2px solid var(--border);
             min-height: 60px;
         }
 
         .people-panel .title {
             font-size: 0.9rem;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
             font-weight: bold;
         }
 
         .people-panel .seats-info {
             font-size: 0.8rem;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
         }
 
         .people-panel .people-list {
             font-size: 0.9rem;
-            color: #4a4949;
+            color: var(--text-body);
             line-height: 1.4;
         }
 
         .people-panel .empty-message {
             font-size: 0.9rem;
-            color: #999;
+            color: var(--text-subtle);
             font-style: italic;
         }
 
         .timer.active {
-            border: 2px solid #8f0057;
+            border: 2px solid var(--ring);
         }
 
         .timer.inactive {
@@ -339,19 +404,19 @@
         }
 
         .timer.finish-window {
-            background: #8f0057 !important;
-            color: #fff !important;
-            border-color: #fff !important;
+            background: var(--action-bg) !important;
+            color: var(--on-accent) !important;
+            border-color: var(--border) !important;
         }
 
         .timer.finish-window .label {
-            color: #ff97d7 !important;
+            color: var(--on-accent) !important;
         }
 
         .timer .count.starting-text {
             font-size: 1.3rem;
             font-weight: 600;
-            color: #333;
+            color: var(--text-body);
             line-height: 1.2;
             white-space: normal;
             display: flex;
@@ -364,29 +429,29 @@
 
         .timer .count.starting-text .scheduled-time {
             font-size: 1.1rem;
-            color: #666;
+            color: var(--text-subtle);
             margin-top: 0.2rem;
         }
 
         .timer .count.lounge-text {
             font-size: 1.3rem;
             font-weight: bold;
-            color: #fff;
+            color: var(--on-accent);
         }
 
         .global-settings {
             margin-bottom: 1.5rem;
             padding: 1rem;
-            background: #fff;
+            background: var(--surface-raised);
             border-radius: 4px;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .global-settings label {
             display: block;
             margin-bottom: 0.5rem;
             font-weight: bold;
-            color: #8f0057;
+            color: var(--text-accent);
             position: relative;
             display: flex;
             align-items: center;
@@ -397,8 +462,8 @@
             width: 16px;
             height: 16px;
             border-radius: 50%;
-            background: #ff97d7;
-            color: white;
+            background: var(--action-bg-hover);
+            color: var(--on-accent);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -414,8 +479,8 @@
             transform: translateX(-50%);
             bottom: calc(100% + 5px);
             padding: 8px 12px;
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border-radius: 4px;
             font-size: 14px;
             font-weight: normal;
@@ -432,16 +497,16 @@
             bottom: calc(100% - 5px);
             border-width: 5px;
             border-style: solid;
-            border-color: #8f0057 transparent transparent transparent;
+            border-color: var(--ring) transparent transparent transparent;
         }
 
         .global-settings select {
             width: 100%;
             padding: 0.5rem;
             margin-bottom: 1rem;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
-            color: #4a4949;
+            color: var(--text-body);
         }
 
         .line-config {
@@ -450,10 +515,10 @@
             gap: 0.5rem;
             margin-bottom: 1rem;
             padding: 0.5rem;
-            background: #fff;
+            background: var(--surface-raised);
             border-radius: 4px;
             align-items: center;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .line-fields {
@@ -471,8 +536,8 @@
         }
 
         .line-buttons button {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -483,37 +548,37 @@
         }
 
         .line-buttons button:hover {
-            background: #ff97d7;
-            color: #fff;
+            background: var(--action-bg-hover);
+            color: var(--on-accent);
         }
 
         .line-buttons button:last-child {
-            background: #4a4949;
+            background: var(--action-muted-bg);
         }
 
         .line-buttons button:last-child:hover {
-            background: #666;
+            background: var(--action-muted-bg);
         }
 
         .line-config input[type="text"] {
             padding: 0.5rem;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
             width: 100%;
-            color: #4a4949;
+            color: var(--text-body);
         }
 
         .line-config select {
             padding: 0.5rem;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
             min-width: 80px;
-            color: #4a4949;
+            color: var(--text-body);
         }
 
         .add-line-btn {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -523,8 +588,8 @@
         }
 
         .start-btn {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -535,12 +600,12 @@
 
         .start-btn:hover,
         .add-line-btn:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .reset-btn {
-            background: #4a4949;
-            color: white;
+            background: var(--action-muted-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -550,15 +615,15 @@
         }
 
         .reset-btn:hover {
-            background: #666;
+            background: var(--action-muted-bg);
         }
 
         .line-config button:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         h1 {
-            color: #8f0057;
+            color: var(--text-accent);
             text-align: center;
             margin-bottom: 2rem;
             font-size: 2.5rem;
@@ -568,13 +633,13 @@
             width: 180px;
             height: 180px;
             margin: 0 auto 2rem;
-            background: #ff97d7;
+            background: var(--action-bg-hover);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            border: 2px solid #8f0057;
+            border: 2px solid var(--ring);
         }
 
         .logo {
@@ -588,8 +653,8 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(143, 0, 87, 0.95);
-            color: white;
+            background: var(--alarm-bg);
+            color: var(--alarm-fg);
             padding: 2rem;
             border-radius: 8px;
             text-align: center;
@@ -655,16 +720,16 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: #fff;
+            background: var(--surface-raised);
             padding: 1rem 0;
             margin-top: 1rem;
-            border-top: 2px solid #ff97d7;
+            border-top: 2px solid var(--border);
             z-index: 1002;
         }
 
         .start-btn {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -674,8 +739,8 @@
         }
 
         .reset-btn {
-            background: #4a4949;
-            color: white;
+            background: var(--action-muted-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -689,24 +754,24 @@
             gap: 0.5rem;
             margin-bottom: 1rem;
             padding: 0.5rem;
-            background: #fff;
+            background: var(--surface-raised);
             border-radius: 4px;
             align-items: center;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .people-management {
             width: 100%;
             margin: 0.5rem 0;
             padding: 0.5rem;
-            background: #fafafa;
+            background: var(--surface-sunken);
             border-radius: 4px;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .people-count {
             font-weight: bold;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
             display: flex;
             justify-content: space-between;
@@ -724,16 +789,16 @@
             display: flex;
             align-items: center;
             gap: 0.25rem;
-            background: #fff;
+            background: var(--surface-raised);
             padding: 0.25rem 0.5rem;
             border-radius: 4px;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .person-entry button {
             background: none;
             border: none;
-            color: #8f0057;
+            color: var(--text-accent);
             cursor: pointer;
             font-size: 1.2rem;
             padding: 0 0.25rem;
@@ -741,12 +806,12 @@
         }
 
         .person-entry button:hover {
-            color: #ff97d7;
+            color: var(--text-accent);
         }
 
         .person-order {
             font-weight: bold;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-right: 0.25rem;
             font-size: 0.9rem;
             min-width: 1.2rem;
@@ -755,7 +820,7 @@
         }
 
         .wait-queue-entry .person-order {
-            color: #0066cc;
+            color: var(--text-accent);
         }
 
         .add-person {
@@ -766,13 +831,13 @@
         .add-person input {
             flex: 1;
             padding: 0.5rem;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
         }
 
         .add-person button {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -780,20 +845,20 @@
         }
 
         .add-person button:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .timer .people {
             margin-top: 0.5rem;
             font-size: 0.9rem;
-            color: #4a4949;
+            color: var(--text-body);
             max-height: 3em;
             overflow-y: auto;
         }
 
         .timer .people-count {
             font-size: 0.8rem;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-top: 0.25rem;
         }
 
@@ -803,18 +868,18 @@
 
         @keyframes blink {
             0% {
-                background: #fff;
-                color: #4a4949;
+                background: var(--surface-raised);
+                color: var(--text-body);
             }
 
             50% {
-                background: #8f0057;
-                color: #fff;
+                background: var(--action-bg);
+                color: var(--on-accent);
             }
 
             100% {
-                background: #fff;
-                color: #4a4949;
+                background: var(--surface-raised);
+                color: var(--text-body);
             }
         }
 
@@ -827,7 +892,7 @@
         }
 
         .role-selector {
-            background: #fff;
+            background: var(--surface-raised);
             padding: 0;
             border-radius: 4px;
             border: none;
@@ -837,9 +902,9 @@
 
         .role-selector select {
             padding: 0.5rem;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
-            color: #4a4949;
+            color: var(--text-body);
             width: 100%;
         }
 
@@ -847,7 +912,7 @@
             display: block;
             margin-bottom: 0.5rem;
             font-weight: bold;
-            color: #8f0057;
+            color: var(--text-accent);
         }
 
         /* Password Modal Styles */
@@ -869,18 +934,18 @@
         }
 
         .password-modal-content {
-            background: white;
+            background: var(--surface-raised);
             padding: 2rem;
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             width: 90%;
             max-width: 400px;
             text-align: center;
-            border: 2px solid #ff97d7;
+            border: 2px solid var(--border);
         }
 
         .password-modal h2 {
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 1rem;
         }
 
@@ -888,14 +953,14 @@
             width: 100%;
             padding: 0.75rem;
             margin: 1rem 0;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
             font-size: 1rem;
         }
 
         .password-modal button {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.75rem 1.5rem;
             border-radius: 4px;
@@ -905,11 +970,11 @@
         }
 
         .password-modal button:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .password-error {
-            color: #ff0000;
+            color: var(--destructive);
             margin-top: 0.5rem;
             display: none;
         }
@@ -922,10 +987,10 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.5rem;
-            background: #fff;
+            background: var(--surface-raised);
             border-radius: 4px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            border: 2px solid #ff97d7;
+            border: 2px solid var(--border);
             z-index: 3000;
             pointer-events: auto;
         }
@@ -933,7 +998,7 @@
         .alarm-toggle-label {
             font-size: 0.9rem;
             font-weight: bold;
-            color: #8f0057;
+            color: var(--text-accent);
             margin: 0;
             white-space: nowrap;
             pointer-events: none;
@@ -962,7 +1027,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: #ccc;
+            background-color: var(--secondary);
             transition: .4s;
             border-radius: 24px;
             pointer-events: auto;
@@ -975,13 +1040,13 @@
             width: 18px;
             left: 3px;
             bottom: 3px;
-            background-color: white;
+            background-color: var(--on-accent);
             transition: .4s;
             border-radius: 50%;
         }
 
         .toggle-switch input:checked+label {
-            background-color: #8f0057;
+            background-color: var(--action-bg);
         }
 
         .toggle-switch input:checked+label:before {
@@ -989,8 +1054,8 @@
         }
 
         .play-alarm-button {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.4rem 0.6rem;
             border-radius: 4px;
@@ -1002,7 +1067,7 @@
         }
 
         .play-alarm-button:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .play-alarm-button:active {
@@ -1022,8 +1087,8 @@
             width: 100%;
             box-sizing: border-box;
             padding: 1.1rem 1rem;
-            background: #b00020;
-            color: #fff;
+            background: var(--danger-border);
+            color: var(--on-accent);
             font-size: 1.5rem;
             font-weight: bold;
             text-align: center;
@@ -1048,8 +1113,8 @@
         }
 
         @keyframes armPulse {
-            0%, 100% { background: #b00020; }
-            50% { background: #e53935; }
+            0%, 100% { background: var(--danger-border); }
+            50% { background: var(--destructive); }
         }
 
         /* The arm banner is fixed at the top, so push the toggle bar clear of it. */
@@ -1072,21 +1137,21 @@
         }
 
         .audio-badge.state-ok {
-            background: #e6f4ea;
-            color: #1e6b33;
-            border-color: #9bcfab;
+            background: var(--ok-bg);
+            color: var(--ok-fg);
+            border-color: var(--ok-border);
         }
 
         .audio-badge.state-warn {
-            background: #fff4e5;
-            color: #8a5200;
-            border-color: #e8c07d;
+            background: var(--warn-bg);
+            color: var(--warn-fg);
+            border-color: var(--warn-border);
         }
 
         .audio-badge.state-bad {
-            background: #b00020;
-            color: #fff;
-            border-color: #7a0016;
+            background: var(--danger-border);
+            color: var(--on-accent);
+            border-color: var(--danger-border);
             animation: armPulse 1.6s ease-in-out infinite;
         }
 
@@ -1098,7 +1163,7 @@
             padding: 3rem 2rem;
             font-size: clamp(2.5rem, 7vw, 5rem);
             line-height: 1.15;
-            border: 6px solid #fff;
+            border: 6px solid var(--border);
             animation: alarmPulse 0.9s ease-in-out infinite;
         }
 
@@ -1125,8 +1190,8 @@
             bottom: 1.5rem;
             left: 50%;
             transform: translateX(-50%);
-            background: #8f0057;
-            color: #fff;
+            background: var(--action-bg);
+            color: var(--on-accent);
             padding: 0.9rem 1.6rem;
             border-radius: 999px;
             font-size: 1.3rem;
@@ -1145,15 +1210,15 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: #fff;
-            color: #8f0057;
+            background: var(--surface-raised);
+            color: var(--text-accent);
             padding: 2rem;
             border-radius: 10px;
             text-align: center;
             z-index: 5200;
             display: none;
             box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-            border: 3px solid #8f0057;
+            border: 3px solid var(--ring);
             max-width: 90vw;
         }
 
@@ -1169,7 +1234,7 @@
         .sound-check p {
             margin: 0 0 1.2rem;
             font-size: 0.95rem;
-            color: #555;
+            color: var(--text-subtle);
         }
 
         .sound-check button {
@@ -1183,13 +1248,13 @@
         }
 
         .sound-check .yes-btn {
-            background: #1e6b33;
-            color: #fff;
+            background: var(--ok-border);
+            color: var(--on-accent);
         }
 
         .sound-check .no-btn {
-            background: #b00020;
-            color: #fff;
+            background: var(--danger-border);
+            color: var(--on-accent);
         }
 
         /* Wait Queue Styles */
@@ -1197,14 +1262,14 @@
             width: 100%;
             margin: 0.5rem 0;
             padding: 0.5rem;
-            background: #fafafa;
+            background: var(--surface-sunken);
             border-radius: 4px;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .wait-queue-title {
             font-weight: bold;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
             display: flex;
             justify-content: space-between;
@@ -1213,7 +1278,7 @@
 
         .wait-queue-count {
             font-size: 0.8rem;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
         }
 
@@ -1228,16 +1293,16 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            background: #fff;
+            background: var(--surface-raised);
             padding: 0.25rem 0.5rem;
             border-radius: 4px;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
         }
 
         .wait-queue-entry button {
             background: none;
             border: none;
-            color: #8f0057;
+            color: var(--text-accent);
             cursor: pointer;
             font-size: 1.2rem;
             padding: 0 0.25rem;
@@ -1245,7 +1310,7 @@
         }
 
         .wait-queue-entry button:hover {
-            color: #ff97d7;
+            color: var(--text-accent);
         }
 
         .add-wait-queue {
@@ -1256,13 +1321,13 @@
         .add-wait-queue input {
             flex: 1;
             padding: 0.5rem;
-            border: 1px solid #ff97d7;
+            border: 1px solid var(--border);
             border-radius: 4px;
         }
 
         .add-wait-queue button {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -1270,12 +1335,12 @@
         }
 
         .add-wait-queue button:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .promote-button {
-            background: #8f0057;
-            color: white;
+            background: var(--action-bg);
+            color: var(--on-accent);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -1286,11 +1351,11 @@
         }
 
         .promote-button:hover {
-            background: #ff97d7;
+            background: var(--action-bg-hover);
         }
 
         .promote-button:disabled {
-            background: #6c757d;
+            background: var(--action-muted-bg);
             cursor: not-allowed;
         }
 
@@ -1298,24 +1363,24 @@
             width: 200px;
             margin-top: 0.5rem;
             padding: 0.75rem;
-            background: #fff;
+            background: var(--surface-raised);
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
-            border: 2px solid #ff97d7;
+            border: 2px solid var(--border);
             min-height: 60px;
         }
 
         .wait-queue-panel .title {
             font-size: 0.9rem;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
             font-weight: bold;
         }
 
         .wait-queue-panel .queue-info {
             font-size: 0.8rem;
-            color: #8f0057;
+            color: var(--text-accent);
             margin-bottom: 0.5rem;
         }
 
@@ -1324,18 +1389,72 @@
             flex-direction: column;
             gap: 0.25rem;
             font-size: 0.9rem;
-            color: #4a4949;
+            color: var(--text-body);
             line-height: 1.4;
         }
 
         .wait-queue-panel .empty-message {
             font-size: 0.9rem;
-            color: #999;
+            color: var(--text-subtle);
             font-style: italic;
         }
 
         .wait-queue-entry .person-order {
-            color: #8f0057;
+            color: var(--text-accent);
+        }
+
+        /* ------------------------------------------------------------------
+           Form controls.
+           Native <select> and <input> do NOT inherit a dark page: left alone they
+           render with the platform's own light chrome, which on this background came
+           out as white boxes with invisible text. Colour, background and border are
+           therefore set explicitly, and <option> too, because the popup list is drawn
+           by the OS and ignores the control's own colours on several platforms.
+           ------------------------------------------------------------------ */
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select,
+        textarea {
+            background: var(--surface-sunken);
+            color: var(--text-body);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.5rem 0.65rem;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        select option {
+            background: var(--surface-raised);
+            color: var(--text-body);
+        }
+
+        input::placeholder {
+            color: var(--text-subtle);
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--ring);
+            box-shadow: 0 0 0 3px rgb(239 109 201 / 0.35);
+        }
+
+        /* The gear sits on the page, not on a card, so it needs its own surface. */
+        .config-header {
+            background: var(--surface-raised);
+            border-color: var(--border);
+        }
+        .config-header:hover,
+        .config-header.open {
+            background: var(--action-bg);
+        }
+        .config-header:hover .gear-icon,
+        .config-header.open .gear-icon {
+            stroke: var(--on-accent);
         }
     </style>
 </head>
@@ -1358,7 +1477,7 @@
 
     <div style="text-align: center; width: 100%;">
         <div id="waitQueueIndicator"
-            style="display: inline-block; padding: 0.5rem 1rem; background: #fff; border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); border: 1px solid #ff97d7; font-size: 0.9rem; color: #8f0057; margin: 1rem auto;">
+            style="display: inline-block; padding: 0.5rem 1rem; background: var(--surface-raised); border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); border: 1px solid var(--border); font-size: 0.9rem; color: var(--text-accent); margin: 1rem auto;">
             <span style="font-weight: bold;">Wait Queue:</span> <span id="waitQueueCount">0</span> people
         </div>
     </div>
@@ -1377,7 +1496,7 @@
     </div>
 
     <div id="currentTimeDisplay"
-        style="position: fixed; top: 4rem; left: 1rem; background: #fff; padding: 0.5rem; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); border: 2px solid #ff97d7; font-size: 0.9rem; color: #8f0057; font-weight: bold; z-index: 3000;">
+        style="position: fixed; top: 4rem; left: 1rem; background: var(--surface-raised); padding: 0.5rem; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); border: 2px solid var(--border); font-size: 0.9rem; color: var(--text-accent); font-weight: bold; z-index: 3000;">
         <span id="currentTime">--:--</span>
     </div>
 
@@ -1535,14 +1654,14 @@
                 <div class="wait-queue-title">
                     <span>General Wait Queue</span>
                     <button type="button" id="clearGeneralWaitQueueBtn"
-                        style="background: none; border: none; color: #0066cc; cursor: pointer; font-size: 0.8rem;">Clear
+                        style="background: none; border: none; color: var(--text-accent); cursor: pointer; font-size: 0.8rem;">Clear
                         All</button>
                 </div>
                 <div class="wait-queue-count">
                     People: <span id="generalWaitQueueCount">0</span> (no limit)
                 </div>
                 <div class="next-line-info" id="nextLineInfo"
-                    style="font-size: 0.8rem; color: #8f0057; margin-bottom: 0.5rem; font-style: italic;">
+                    style="font-size: 0.8rem; color: var(--text-accent); margin-bottom: 0.5rem; font-style: italic;">
                     <!-- Next line information will be displayed here -->
                 </div>
                 <div class="wait-queue-list" id="generalWaitQueueList">
@@ -1561,7 +1680,7 @@
                 </div>
                 <div class="form-buttons">
                     <button type="button" class="reset-btn" onclick="resetApplication()">Reset All Settings</button>
-                    <button type="button" class="reset-btn" style="background:#444"
+                    <button type="button" class="reset-btn" style="background:var(--action-muted-bg)"
                         onclick="AlarmAudio.downloadDiagnostics()"
                         title="Download the alarm audio log for this machine">Download alarm diagnostics</button>
                 </div>
@@ -2760,7 +2879,7 @@
                             </select>
                         </div>
                         ${config.time ? `
-                            <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: #f0f0f0; border-radius: 4px; font-size: 0.9rem; color: #8f0057; font-weight: bold;">
+                            <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: var(--surface-sunken); border-radius: 4px; font-size: 0.9rem; color: var(--text-accent); font-weight: bold;">
                                 Start time: ${config.time}
                             </div>
                         ` : ''}
@@ -2768,7 +2887,7 @@
                             <div class="people-count">
                                 <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
                                 ${currentRole !== 'viewer' ? `
-                                    <button type="button" onclick="clearPeople('${config.id}')" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                    <button type="button" onclick="clearPeople('${config.id}')" style="background: none; border: none; color: var(--text-accent); cursor: pointer; font-size: 0.8rem;">Clear All</button>
                                 ` : ''}
                             </div>
                             <div class="people-list">
@@ -2886,7 +3005,7 @@
                         </select>
                     </div>
                     ${config.time ? `
-                        <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: #f0f0f0; border-radius: 4px; font-size: 0.9rem; color: #8f0057; font-weight: bold;">
+                        <div style="text-align: center; margin: 0.5rem 0; padding: 0.5rem; background: var(--surface-sunken); border-radius: 4px; font-size: 0.9rem; color: var(--text-accent); font-weight: bold;">
                             Start time: ${config.time}
                         </div>
                     ` : ''}
@@ -2894,7 +3013,7 @@
                         <div class="people-count">
                             <span>People: ${config.people ? config.people.length : 0}/${MAX_PEOPLE_PER_LINE}</span>
                             ${currentRole !== 'viewer' ? `
-                                <button type="button" onclick="clearPeople('${config.id}')" style="background: none; border: none; color: #8f0057; cursor: pointer; font-size: 0.8rem;">Clear All</button>
+                                <button type="button" onclick="clearPeople('${config.id}')" style="background: none; border: none; color: var(--text-accent); cursor: pointer; font-size: 0.8rem;">Clear All</button>
                             ` : ''}
                         </div>
                         <div class="people-list">
@@ -3807,21 +3926,21 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <div style="position: relative;">
-                            <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown('${person.id}')">Move</button>
-                            <div id="moveDropdown${person.id}" style="display: none; position: absolute; right: 0; background: white; border: 1px solid #ff97d7; border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem; min-width: 100px;">
+                            <button type="button" style="background: var(--action-bg); color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;" onclick="toggleMoveDropdown('${person.id}')">Move</button>
+                            <div id="moveDropdown${person.id}" style="display: none; position: absolute; right: 0; background: white; border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); z-index: 1000; margin-top: 0.25rem; min-width: 100px;">
                                 ${lineConfigs.map(line => `
-                                    <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: #4a4949;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='none'" onclick="promotePersonToLine('${person.id}', '${line.id}'); toggleMoveDropdown('${person.id}')">${line.name}</button>
+                                    <button type="button" style="display: block; width: 100%; background: none; border: none; padding: 0.5rem; text-align: left; cursor: pointer; color: var(--text-body);" onmouseover="this.style.background='var(--surface-sunken)'" onmouseout="this.style.background='none'" onclick="promotePersonToLine('${person.id}', '${line.id}'); toggleMoveDropdown('${person.id}')">${line.name}</button>
                                 `).join('')}
                             </div>
                         </div>
-                        <button type="button" style="color: #8f0057; font-size: 1.2rem; background: none; border: none; cursor: pointer;" onclick="removeFromGeneralWaitQueue('${person.id}')">×</button>
+                        <button type="button" style="color: var(--text-accent); font-size: 1.2rem; background: none; border: none; cursor: pointer;" onclick="removeFromGeneralWaitQueue('${person.id}')">×</button>
                     </div>
                 `;
                 list.appendChild(entry);
             });
             // Bulk promote buttons
             bulkPromote.innerHTML = lineConfigs.map(line => `
-                <button type="button" style="background: #8f0057; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine('${line.id}')">Promote to ${line.name}</button>
+                <button type="button" style="background: var(--action-bg); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.25rem;" onclick="bulkPromoteToLine('${line.id}')">Promote to ${line.name}</button>
             `).join('');
         }
 
