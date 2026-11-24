@@ -2588,7 +2588,25 @@
                 stateRef.transaction(function (cur) {
                     if (cur && cur.timestamp && cur.config) return; // someone else seeded -> abort
                     return { timestamp: Date.now(), config: currentScalars() };
-                }, function (err) { if (err) console.error('Seed transaction failed:', err); }, false);
+                }, function (err) {
+                    if (!err) return;
+                    // Under the locked-down rules the seed needs a token. `.finally` above means we
+                    // get here even when anonymous sign-in FAILED (it already warned, and a long
+                    // automated run can hit the per-IP sign-up rate limit), and a denial is then
+                    // the expected, explained outcome rather than a fault in this code. Only a
+                    // denial while we ARE signed in points at the rules themselves, so only that
+                    // is an error.
+                    const denied = String((err && (err.code || err.message)) || '').toUpperCase()
+                        .indexOf('PERMISSION_DENIED') !== -1;
+                    let signedIn = false;
+                    try { signedIn = !!(firebase.auth && firebase.auth().currentUser); } catch (e) { /* ignore */ }
+                    if (denied && !signedIn) {
+                        console.warn('Seed skipped: not signed in, so the write was denied. ' +
+                            'Check that the Anonymous provider is enabled in the Firebase console.');
+                        return;
+                    }
+                    console.error('Seed transaction failed:', err);
+                }, false);
             });
         }
 

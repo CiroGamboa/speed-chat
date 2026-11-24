@@ -92,6 +92,28 @@ That is what the operator's **Test sound → did you hear it?** check is for, an
 badge never claims "sound OK" on its own. Also untested headless, by design: WASAPI rebinding,
 the `setSinkId` round-trip, and Bluetooth standby/wake latency. See `AUDIO_TROUBLESHOOTING.md`.
 
+## Post-merge run against main — 25/25 passed (4.1m)
+
+`main` moved while the audio work was in progress (server-anchored clock, compare-and-swap
+reschedule, the `dbWrite` auth retry, and `tests/schedule.spec.ts`). After merging it in, the whole
+suite — the 18 above plus main's 7 scheduling scenarios — was re-run:
+
+```
+TEST_PORT=8113 RUN_AGAINST_PROD=1 npx playwright test   ->   25 passed (4.1m)
+```
+
+The first post-merge run was **24 passed, 1 failed**: test 15 tripped `appErrors() === []` on
+`Seed transaction failed: permission_denied`. The seed path is identical on `main` and was not
+touched by this branch; the test simply exposed it. `ensureSeeded()` waits on `authReady.finally`,
+which also fires when anonymous sign-in *failed* — and a long run signs in anonymously once per
+browser context, which can hit Firebase's per-IP sign-up rate limit. The seed then goes out with no
+token and is denied by the locked-down rules.
+
+A denial while signed out is the expected, already-warned-about outcome, so it now logs one clear
+warning naming the likely cause; a denial while signed **in** still logs an error, because that one
+points at the rules themselves. Test 15 passes in isolation either way — the fix is about what a
+long run reports, not about the audio path.
+
 ## Note on the capacity guard
 
 The plan called for a Firebase transaction to enforce the per-line cap under concurrency. Real testing
