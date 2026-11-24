@@ -2510,21 +2510,39 @@
         function migrateToKeyed() {
             if (migrationDone || currentRole === 'viewer' || !stateRef) return;
             migrationDone = true;
-            const linesObj = {};
-            lineConfigs.forEach((c, i) => {
-                let k = c.id;
-                if (k == null || isNumericKey(k) || String(k).startsWith('legacy-')) k = newId();
-                linesObj[k] = { name: c.name || ('Line ' + (i + 1)), time: c.time || '', order: (typeof c.order === 'number') ? c.order : i };
-                const people = toKeyedEntries(c.people);
-                if (Object.keys(people).length) linesObj[k].people = people;
-                const wq = toKeyedEntries(c.waitQueue);
-                if (Object.keys(wq).length) linesObj[k].waitQueue = wq;
+            // Wait for anonymous auth before writing, exactly as ensureSeeded does.
+            //
+            // This runs from the snapshot handler, which fires well before sign-in resolves
+            // (~0.5-1s). Under the locked-down rules the set() was therefore answered with
+            // PERMISSION_DENIED, and because migrationDone had already been latched it never
+            // retried: the tree stayed in legacy shape forever while the local parse had already
+            // rewritten the ids to `legacy-N`. The next write then addressed a key that did not
+            // exist in the database and created a PHANTOM second line -- split brain between what
+            // the screen showed and what was stored.
+            //
+            // The tree is built inside the callback so it reflects the latest parsed state rather
+            // than a snapshot from before the wait, and the latch is released on failure so a
+            // later snapshot can try again instead of leaving the data stranded.
+            authReady.finally(function () {
+                const linesObj = {};
+                lineConfigs.forEach((c, i) => {
+                    let k = c.id;
+                    if (k == null || isNumericKey(k) || String(k).startsWith('legacy-')) k = newId();
+                    linesObj[k] = { name: c.name || ('Line ' + (i + 1)), time: c.time || '', order: (typeof c.order === 'number') ? c.order : i };
+                    const people = toKeyedEntries(c.people);
+                    if (Object.keys(people).length) linesObj[k].people = people;
+                    const wq = toKeyedEntries(c.waitQueue);
+                    if (Object.keys(wq).length) linesObj[k].waitQueue = wq;
+                });
+                const tree = { timestamp: Date.now(), config: Object.assign(currentScalars(), { lines: linesObj }) };
+                const gwq = toKeyedEntries(generalWaitQueue);
+                if (Object.keys(gwq).length) tree.config.generalWaitQueue = gwq;
+                console.log('Migrating legacy state to keyed structure');
+                stateRef.set(tree).catch(err => {
+                    migrationDone = false;
+                    console.error('Migration write failed:', err);
+                });
             });
-            const tree = { timestamp: Date.now(), config: Object.assign(currentScalars(), { lines: linesObj }) };
-            const gwq = toKeyedEntries(generalWaitQueue);
-            if (Object.keys(gwq).length) tree.config.generalWaitQueue = gwq;
-            console.log('Migrating legacy state to keyed structure');
-            stateRef.set(tree).catch(err => console.error('Migration write failed:', err));
         }
 
         function handleWriteError(err) {
