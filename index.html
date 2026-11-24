@@ -668,7 +668,7 @@
            gradient, so it reads on the dark page unaided. The pink disc that used to sit
            behind the old mark would now fight it, so there is no plate -- just the mark. */
         .logo-container {
-            width: min(320px, 70vw);
+            width: min(190px, 42vw);
             margin: 0 auto 1.25rem;
             display: flex;
             align-items: center;
@@ -1560,9 +1560,7 @@
             <input type="checkbox" id="alarmToggle" checked>
             <label for="alarmToggle"></label>
         </div>
-        <button id="playAlarmButton" class="play-alarm-button" onclick="playAlarmManually()" title="Play alarm sound">▶</button>
-        <button id="soundTestButton" class="play-alarm-button" onclick="AlarmAudio.runSoundCheck()"
-            title="Play a short test tone and confirm you heard it">Test sound</button>
+        <button id="playAlarmButton" class="play-alarm-button" onclick="playAlarmManually()" title="Play the alarm and confirm you can hear it">▶</button>
         <span id="audioBadge" class="audio-badge state-warn" onclick="AlarmAudio.runSoundCheck()"
             title="Alarm audio status — click to run a sound check">Checking audio…</span>
     </div>
@@ -2334,14 +2332,28 @@
             }
 
             // ---- operator sound check ---------------------------------------------
-            function runSoundCheck() {
-                tryArm('soundcheck').then(function (ok) {
-                    if (!ok) { renderBadge(); return; }
+            // Arm the output and open the "did you hear it?" dialog, WITHOUT choosing or
+            // playing a sound. Only the operator can tell us whether the speaker actually made
+            // a noise -- no API reports that -- so this confirmation is the only thing that can
+            // turn the badge green, and it is what the manual alarm button now reuses.
+            //
+            // Returns whether arming succeeded, so the caller can skip its own playback and let
+            // the badge explain why nothing will be heard.
+            function beginSoundCheck(source) {
+                return tryArm(source || 'soundcheck').then(function (ok) {
+                    if (!ok) { renderBadge(); return false; }
                     pendingCheck = true;
-                    diag('soundcheck.start');
-                    ring('bell30s', 'soundcheck');
+                    diag('soundcheck.start', { source: source || 'soundcheck' });
                     const dlg = document.getElementById('soundCheck');
                     if (dlg) dlg.classList.add('visible');
+                    return true;
+                });
+            }
+
+            function runSoundCheck() {
+                return beginSoundCheck('soundcheck').then(function (armed) {
+                    if (armed) ring('bell30s', 'soundcheck');
+                    return armed;
                 });
             }
 
@@ -2435,6 +2447,7 @@
                 startKeepAlive: startKeepAlive,
                 stopKeepAlive: stopKeepAlive,
                 runSoundCheck: runSoundCheck,
+                beginSoundCheck: beginSoundCheck,
                 confirmHeard: confirmHeard,
                 downloadDiagnostics: downloadDiagnostics,
                 diagnosticsText: diagnosticsText,
@@ -3333,11 +3346,28 @@
             AlarmAudio.ring('bell30s', 'warn30');
         }
 
+        // The one audio button. It used to be two: this one fired the real rotation alarm, and
+        // a separate "Test sound" button armed the output, played the 30-second clip and asked
+        // the operator to confirm they heard it. They overlapped confusingly -- both were "make
+        // a noise now" -- while only the second could actually turn the status badge green,
+        // because nothing but a human can report that a speaker made a sound.
+        //
+        // Merged, with the real alarm as the thing being tested: there is no point confirming
+        // you can hear a clip that is not the one the room will hear. So this arms the output,
+        // plays the ACTUAL rotation alarm with its banner, and then asks the confirmation
+        // question. force=true keeps it working regardless of the alarm toggle.
+        //
+        // Arming happens FIRST and the playback is skipped when it fails, so an un-armed page
+        // says so through the badge instead of flashing a silent banner and claiming success.
         function playAlarmManually() {
-            // Manually trigger the alarm notification and sound.
-            // Passes force=true so it plays regardless of the alarm toggle state.
             console.log('Manual alarm triggered');
-            showChangeSeatNotification(true);
+            if (!window.AlarmAudio || !AlarmAudio.beginSoundCheck) {
+                showChangeSeatNotification(true);   // degraded, but still rings
+                return;
+            }
+            AlarmAudio.beginSoundCheck('manual').then(function (armed) {
+                if (armed) showChangeSeatNotification(true);
+            });
         }
 
         // updateTimers() now ONLY rebuilds the timer DOM structure. The ticking (countdowns +
