@@ -227,10 +227,21 @@ test('18. the diagnostics log survives the reload an operator reaches for first'
   await waitFor(() => oracle.read(''), (s) => !!(s && s.timestamp), 10000);
 
   await a.clickManualAlarm();
-  // The persist is throttled, so wait for it to land rather than guessing at a delay.
+  // Wait for the RING specifically to reach storage, not merely for the key to be non-empty.
+  //
+  // The old gate polled for length > 10, which is satisfied the instant the page boots: by the
+  // time the manual alarm fires, this key already holds kilobytes of startup entries
+  // (ctx.created, clip.fetched, arm.ok...). It resolved in 3-76ms every run and gated nothing,
+  // so whether the test passed came down to whether the click happened to land inside the
+  // first 2s persist window -- which in turn depended on how long Firebase anonymous sign-in
+  // took. Throttled auth meant a slow test meant a late click meant a failure, which read as
+  // flakiness with no connection to the thing under test.
   await expect
-    .poll(() => a.page.evaluate(() => (localStorage.getItem('speedchat_alarm_log') || '').length), { timeout: 15000 })
-    .toBeGreaterThan(10);
+    .poll(
+      () => a.page.evaluate(() => (localStorage.getItem('speedchat_alarm_log') || '').includes('"event":"ring"')),
+      { timeout: 15000 },
+    )
+    .toBe(true);
 
   await a.page.reload({ waitUntil: 'domcontentloaded' });
   await a.page.waitForTimeout(1200);

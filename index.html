@@ -1867,15 +1867,50 @@
                 return entry;
             }
 
+            // Write the log out now, MERGING with whatever is already stored.
+            //
+            // Merging, not replacing, because `log` only ever holds the CURRENT page's entries --
+            // nothing seeds it from storage at startup. A plain setItem therefore meant the first
+            // flush after a reload overwrote the previous session's evidence with a handful of
+            // fresh startup lines. That is the opposite of what this key exists for: the whole
+            // point is that the operator's instinct on failure is to reload, and the reload must
+            // not be what destroys the record of the failure.
+            //
+            // Deduped by t+'#'+seq and sorted the same way diagnosticsText() already merges the
+            // two sources, so the file an operator downloads and the key on disk agree.
+            function persistNow() {
+                if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+                try {
+                    let prev = [];
+                    try { prev = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (e) { prev = []; }
+                    if (!Array.isArray(prev)) prev = [];
+                    const bySeq = {};
+                    prev.concat(log).forEach(function (e) { if (e) bySeq[e.t + '#' + e.seq] = e; });
+                    const merged = Object.keys(bySeq)
+                        .map(function (k) { return bySeq[k]; })
+                        .sort(function (a, b) { return (a.t - b.t) || (a.seq - b.seq); });
+                    localStorage.setItem(LOG_KEY, JSON.stringify(merged.slice(-LOG_MAX)));
+                } catch (e) { /* quota */ }
+            }
+
+            // Steady-state throttle: at most one write every 2s however chatty the log gets.
             function persistSoon() {
                 if (persistTimer) return;
                 persistTimer = setTimeout(function () {
                     persistTimer = null;
-                    // The operator's instinct on failure is to reload the page, which would
-                    // otherwise destroy every bit of evidence about what went wrong.
-                    try { localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(-LOG_MAX))); } catch (e) { /* quota */ }
+                    persistNow();
                 }, 2000);
             }
+
+            // ...but a throttle alone loses the last two seconds, which is exactly the window
+            // containing the ring that just failed. Flush synchronously when the page goes away.
+            // localStorage.setItem is synchronous, so it completes before unload; `pagehide`
+            // fires on reload, navigation and bfcache entry, and the visibilitychange arm covers
+            // a tab the operator switches away from or an OS that kills it in the background.
+            window.addEventListener('pagehide', persistNow);
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) persistNow();
+            });
 
             function publish() {
                 window.__alarmLog = log;
