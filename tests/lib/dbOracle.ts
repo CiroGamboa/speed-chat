@@ -114,6 +114,13 @@ export const oracle = {
 
   // ---- shape-agnostic readers ----
   // Returns an array of { id, name } for a given collection object/array.
+  // NOT ORDERED. This returns Firebase's own key order (lexicographic over the client-generated
+  // UUIDs), which has nothing to do with what the app displays: the app sorts people and queue
+  // members by `ts` then key (entriesToArray) and lines by `order`. The two coincide often enough
+  // that an order-sensitive assertion through the oracle passes most runs and fails occasionally.
+  //
+  // Assert SETS against the oracle and ORDER against the UI -- display order is what a restyle
+  // can break, and the DOM is where it is observable.
   entries(obj: any): Array<{ id: string; name: string }> {
     if (!obj) return [];
     if (Array.isArray(obj)) {
