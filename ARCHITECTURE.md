@@ -88,6 +88,11 @@ Benefits:
 
 ### Firebase Schema
 
+> **Stale below:** the `lines` shape shown here is the legacy array form. Since commit `38afff3`
+> lines are a keyed object under `config/lines/<uuid>`, which is what avoids two admins colliding
+> on the same numeric id. The rest of the section still holds.
+
+
 ```
 /state
   ├── timestamp: 1708185600000
@@ -420,12 +425,55 @@ state_updated() // Blocked by flag! ❌
 - Browser console: `console.log` statements
 - Firebase errors appear in console
 - Network tab: See Firebase requests
+- Alarm audio: the status badge beside the Alarm switch, and
+  gear icon → **Download alarm diagnostics** (see `AUDIO_TROUBLESHOOTING.md`)
 
 ### Recommended During Events
-1. Keep browser console open
-2. Monitor for errors
-3. Check Firebase Console → Usage
-4. Have backup plan (old git commit)
+1. Run the pre-event sound check (`TESTING_GUIDE.md`) before doors open
+2. Keep browser console open
+3. Monitor for errors
+4. Check Firebase Console → Usage
+5. Have backup plan (old git commit)
+
+## Alarm audio
+
+The alarm is the one part of the app whose failure is invisible from the code's point of view, so
+it is built defensively. Full operator guidance is in `AUDIO_TROUBLESHOOTING.md`.
+
+**Arming.** Browsers refuse to play audio until the page receives a user gesture. The venue screen
+is normally left untouched, and the password modal is skipped once `localStorage` records a
+verified password — so a display could run all night, show every rotation banner on time, and never
+be permitted to make a sound. `AlarmAudio` treats `AudioContext.state === 'running'` as the only
+honest arming signal (a browser will not let a context run without activation), keeps listening for
+gestures until arming is **confirmed**, and shows a full-width red banner while it is not.
+
+One sharp edge worth remembering: Chrome does **not** reject `AudioContext.resume()` on a context
+blocked by the autoplay policy — the promise simply never settles. Arming races it against a
+timeout, or the very first attempt wedges forever.
+
+**Playback paths**, tried in order, with the result of each recorded:
+1. `AudioBufferSourceNode` on a long-lived context, from clips fetched and decoded once at startup.
+2. A **fresh** `<audio>` element per ring, from a Blob URL. A new element binds to the *current*
+   default output device, so a stale or re-routed sink cannot stay wedged for the rest of an event.
+3. A synthesised oscillator pattern, which needs no decoded media at all.
+
+**Keep-alive.** While any line is active, a continuous inaudible tone (~-60 dBFS, not zero) runs on
+the playback context. Chromium swaps a sink fed with silence for a fake one, and re-opening it
+costs a Bluetooth speaker seconds of A2DP restart — long enough to swallow the start of the alarm.
+Because keep-alive and playback share one context, the playback path is warm by construction.
+
+**Device changes.** On `devicechange` the app performs a `setSinkId({type:'none'}) → setSinkId('')`
+round-trip, which needs no permission and no device enumeration and forces a real sink rebuild —
+the software equivalent of re-pairing the speaker by hand.
+
+**What it cannot know.** Nothing in a browser can see the Windows per-app volume, which endpoint
+the audio landed on, or whether the speaker is awake. The app can detect stalls, rejections and
+un-armed state, never silence. That is why the badge never claims "sound OK" on its own and why the
+**Test sound → did you hear it?** confirmation exists.
+
+**Diagnostics.** A 500-entry ring buffer is mirrored to `localStorage` (so it survives the reload an
+operator reaches for first) and exported as text from the config panel. Tests read the same data via
+`window.__alarmLog` / `window.__audioHealth`.
 
 ## Backup and Recovery
 

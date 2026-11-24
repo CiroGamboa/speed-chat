@@ -5,7 +5,7 @@ import { Browser, BrowserContext, Page, CDPSession } from '@playwright/test';
 
 const PASSWORD = 'speedchat2025';
 const APP_PAGE = process.env.APP_PAGE || '/';
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
+const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.TEST_PORT || 8080}`;
 
 export type Role = 'admin' | 'dispatcher' | 'viewer';
 
@@ -29,9 +29,15 @@ export class Actor {
   // its scheduling test hook on a non-localhost deployment).
   // `stallAuthMs` delays the anonymous sign-in round-trip, which widens the window in which the
   // app's writes carry no auth token (see the dbWrite gate in index.html) and makes it testable.
+  // `skipArmingClick` / `seedPasswordFlag` reproduce the venue screen nobody has clicked: no
+  // gesture, and a password already cached, so the modal never appears to supply one.
   static async create(
     browser: Browser,
-    opts: { label: string; role: Role; query?: string; stallAuthMs?: number },
+    opts: {
+      label: string; role: Role;
+      query?: string; stallAuthMs?: number;
+      skipArmingClick?: boolean; seedPasswordFlag?: boolean;
+    },
   ): Promise<Actor> {
     const a = new Actor(opts.label, opts.role);
     a.context = await browser.newContext();
@@ -49,6 +55,14 @@ export class Actor {
         return Promise.resolve();
       };
     });
+
+    // Reproduce the venue machine: the password was entered once long ago, so the modal
+    // never shows again and the page can run all night without a single click.
+    if (opts.seedPasswordFlag) {
+      await a.context.addInitScript(() => {
+        try { localStorage.setItem('speedchat_password_verified', 'true'); } catch (e) { /* ignore */ }
+      });
+    }
 
     a.page.on('pageerror', (err) => a.errors.push(`[pageerror] ${err.message}`));
     a.page.on('console', (msg) => {
@@ -90,8 +104,12 @@ export class Actor {
     // invisible to Playwright's visibility checks but intercepts every pointer event.
     await a.page.locator('#passwordModal').waitFor({ state: 'hidden', timeout: 10_000 });
 
-    // A real click here also satisfies the browser autoplay policy (audioEnabled = true).
-    await a.page.mouse.click(5, 5).catch(() => {});
+    // A real click here also satisfies the browser autoplay policy (it arms AlarmAudio).
+    // skipArmingClick leaves the page un-armed on purpose, which is the state the venue
+    // screen is actually in when the alarm shows on screen but stays silent.
+    if (!opts.skipArmingClick) {
+      await a.page.mouse.click(5, 5).catch(() => {});
+    }
 
     // Admins/dispatchers: make sure the config panel is expanded so line controls are interactable.
     if (opts.role !== 'viewer') await a.openConfigPanel();
@@ -148,9 +166,60 @@ export class Actor {
   async alarmPlays(): Promise<AlarmPlay[]> {
     return this.page.evaluate(() => (window as any).__alarmPlays || []);
   }
+  // Count rings from the app's OWN log when it is available. The app now plays through Web
+  // Audio first and only falls back to a fresh <audio> element, so counting play() calls
+  // alone would miss a ring that never touched an element. The __alarmPlays fallback keeps
+  // this working against tests/fixtures/index.unfixed.html for before/after evidence.
   async alarmPlayCount(id = 'bell'): Promise<number> {
-    const plays = await this.alarmPlays();
-    return plays.filter((p) => p.id === id).length;
+    return this.page.evaluate((clip) => {
+      const log = (window as any).__alarmLog;
+      if (Array.isArray(log)) {
+        return log.filter((e: any) => e.event === 'ring' && e.detail && e.detail.clip === clip).length;
+      }
+      return ((window as any).__alarmPlays || []).filter((p: any) => p.id === clip).length;
+    }, id);
+  }
+
+  // ---- audio health / diagnostics ----
+  async alarmLog(): Promise<Array<{ seq: number; t: number; event: string; detail: any }>> {
+    return this.page.evaluate(() => ((window as any).__alarmLog || []).slice());
+  }
+  async alarmLogEvents(name: string): Promise<any[]> {
+    const log = await this.alarmLog();
+    return log.filter((e) => e.event === name).map((e) => e.detail);
+  }
+  async audioHealth(): Promise<any> {
+    return this.page.evaluate(() => (window as any).__audioHealth || null);
+  }
+  async armBannerVisible(): Promise<boolean> {
+    return this.page.locator('#audioArmBanner').isVisible().catch(() => false);
+  }
+  async audioBadgeText(): Promise<string> {
+    return this.page.locator('#audioBadge').textContent().then((t) => (t || '').trim()).catch(() => '');
+  }
+  async warn30Visible(): Promise<boolean> {
+    return this.page.locator('#warn30Toast').isVisible().catch(() => false);
+  }
+  // Simulate the ENVIRONMENT failing (a dead sink), never a bypass of app logic.
+  async forceAudioFailure(force: { failPrimary?: boolean; failElement?: boolean }): Promise<void> {
+    await this.page.evaluate((f) => { (window as any).__audioForce = f; }, force);
+  }
+  // Arming is asynchronous (the AudioContext has to actually reach 'running'), so any
+  // assertion about a ring that must produce sound has to wait for it first.
+  async waitForArmed(timeoutMs = 15000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const h = await this.audioHealth();
+      if (h && h.armed) return;
+      await this.page.mouse.click(5, 5).catch(() => {});
+      await this.page.waitForTimeout(250);
+    }
+    throw new Error('waitForArmed: audio never armed');
+  }
+  async dispatchDeviceChange(): Promise<void> {
+    await this.page.evaluate(() => {
+      navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+    });
   }
   async notificationVisible(): Promise<boolean> {
     return this.page.locator('#changeSeatNotification').isVisible().catch(() => false);
