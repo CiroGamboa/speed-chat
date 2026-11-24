@@ -10,16 +10,16 @@ import { oracle, stateNs, isProdNs } from './lib/dbOracle';
 
 export default async function globalSetup() {
   if (!process.env.STATE_NS) {
-    // STABLE per machine / per CI run, deliberately NOT a fresh random id each run.
+    // ONE fixed namespace, matching the single `test_ci` key granted in database.rules.json.
     //
-    // `database.rules.json` grants read only to keys beginning `test_`, and the DB root itself is
-    // unreadable — so a namespace left behind by a crashed run is invisible to every tool and can
-    // only be reclaimed through the Firebase console. A per-run id would leak one such key on every
-    // interrupted run, forever. A stable name is simply re-cleared by the clearAll() below.
+    // Not a per-run or per-machine id: that needs a wildcard rule, and a namespace orphaned by a
+    // crashed run would be unreclaimable (reads are granted per key and the DB root is unreadable),
+    // so every interruption would leak a key only the Firebase console could see. One fixed name is
+    // simply re-cleared by the clearAll() below, and the suite runs single-worker against a shared
+    // namespace anyway, so per-run isolation would buy nothing today.
     //
-    // Must satisfy the app's own validation, /^[A-Za-z0-9_-]{1,64}$/ (index.html:1464).
-    const who = (process.env.USER || 'local').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'local';
-    process.env.STATE_NS = process.env.CI ? `test_ci_${process.env.GITHUB_RUN_ID || 'run'}` : `test_${who}`;
+    // Satisfies the app's own validation, /^[A-Za-z0-9_-]{1,64}$/ (getStateNamespace).
+    process.env.STATE_NS = 'test_ci';
   }
 
   // The frozen "unfixed" fixture is a snapshot of commit f407c20, which predates
