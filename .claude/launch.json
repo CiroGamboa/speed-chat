@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "speed-chat",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tests/static-server.mjs"],
+      "port": 8080
+    }
+  ]
+}

@@ -18,15 +18,26 @@ export class Actor {
   page!: Page;
   cdp!: CDPSession;
   errors: string[] = [];
+  logs: string[] = [];
 
   private constructor(label: string, role: Role) {
     this.label = label;
     this.role = role;
   }
 
+  // `query` appends extra URL parameters (e.g. 'diag=1', which the app requires before exposing
+  // its scheduling test hook on a non-localhost deployment).
+  // `stallAuthMs` delays the anonymous sign-in round-trip, which widens the window in which the
+  // app's writes carry no auth token (see the dbWrite gate in index.html) and makes it testable.
+  // `skipArmingClick` / `seedPasswordFlag` reproduce the venue screen nobody has clicked: no
+  // gesture, and a password already cached, so the modal never appears to supply one.
   static async create(
     browser: Browser,
-    opts: { label: string; role: Role; skipArmingClick?: boolean; seedPasswordFlag?: boolean }
+    opts: {
+      label: string; role: Role;
+      query?: string; stallAuthMs?: number;
+      skipArmingClick?: boolean; seedPasswordFlag?: boolean;
+    },
   ): Promise<Actor> {
     const a = new Actor(opts.label, opts.role);
     a.context = await browser.newContext();
@@ -54,12 +65,32 @@ export class Actor {
     }
 
     a.page.on('pageerror', (err) => a.errors.push(`[pageerror] ${err.message}`));
-    a.page.on('console', (msg) => { if (msg.type() === 'error') a.errors.push(`[console.error] ${msg.text()}`); });
+    a.page.on('console', (msg) => {
+      a.logs.push(`[${msg.type()}] ${msg.text()}`);
+      if (msg.type() === 'error') a.errors.push(`[console.error] ${msg.text()}`);
+    });
 
     a.cdp = await a.context.newCDPSession(a.page);
 
-    const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}`;
+    // Must be installed BEFORE the first navigation, or sign-in has already gone out.
+    if (opts.stallAuthMs) {
+      const delay = opts.stallAuthMs;
+      await a.context.route('**/identitytoolkit.googleapis.com/**', async (route) => {
+        await new Promise((r) => setTimeout(r, delay));
+        await route.continue().catch(() => {});
+      });
+    }
+
+    const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}${opts.query ? '&' + opts.query : ''}`;
     await a.page.goto(url, { waitUntil: 'domcontentloaded' });
+
+    // The app reveals its password gate from a window 'load' handler, NOT at DOMContentLoaded, and
+    // the page pulls ~500KB of alarm audio plus the Firebase SDK, so 'load' can land hundreds of ms
+    // after 'domcontentloaded'. Checking for the gate before 'load' finds nothing, skips the whole
+    // password branch, and the modal then appears on top of everything (z-index 3000) and silently
+    // eats every subsequent click -- including the one that opens the config panel. Wait for 'load'
+    // first so the gate is either up or genuinely absent.
+    await a.page.waitForLoadState('load').catch(() => {});
 
     // Dismiss the password modal if present.
     const pw = a.page.locator('#passwordInput');
@@ -68,8 +99,10 @@ export class Actor {
       await a.page.locator('#passwordModal button', { hasText: 'Submit' }).click().catch(async () => {
         await pw.press('Enter');
       });
-      await a.page.locator('#passwordModal').waitFor({ state: 'hidden' }).catch(() => {});
     }
+    // Assert the gate is really gone before touching anything behind it: a modal left standing is
+    // invisible to Playwright's visibility checks but intercepts every pointer event.
+    await a.page.locator('#passwordModal').waitFor({ state: 'hidden', timeout: 10_000 });
 
     // A real click here also satisfies the browser autoplay policy (it arms AlarmAudio).
     // skipArmingClick leaves the page un-armed on purpose, which is the state the venue
@@ -79,14 +112,54 @@ export class Actor {
     }
 
     // Admins/dispatchers: make sure the config panel is expanded so line controls are interactable.
-    if (opts.role !== 'viewer') {
-      const linesVisible = await a.page.locator('#linesContainer').isVisible().catch(() => false);
-      const anyLine = await a.page.locator('#linesContainer .line-config').count().catch(() => 0);
-      if (!linesVisible || anyLine === 0) {
-        await a.page.locator('.config-header').click().catch(() => {});
-      }
-    }
+    if (opts.role !== 'viewer') await a.openConfigPanel();
     return a;
+  }
+
+  // Open the admin config panel and VERIFY it opened. The gear toggles, so a blind click is a
+  // coin flip once anything else has touched the panel; and a swallowed click failure here used to
+  // surface much later as "<some control> is not visible" deep inside a scenario.
+  async openConfigPanel(timeoutMs = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let lastErr = '';
+    while (Date.now() < deadline) {
+      if (await this.configPanelOpen()) return;
+      await this.page
+        .locator('.config-header')
+        .click({ timeout: 2_000 })
+        .catch((e: any) => { lastErr = String((e && e.message) || e).split('\n')[0]; });
+      if (await this.configPanelOpen()) return;
+      await this.page.waitForTimeout(100);
+    }
+    const diag = await this.page
+      .evaluate(() => {
+        const cc = document.getElementById('configContent');
+        const pm = document.getElementById('passwordModal');
+        return {
+          configContentClass: cc ? cc.className : null,
+          passwordModalVisible: !!(pm && pm.className.includes('visible')),
+          readyState: document.readyState,
+        };
+      })
+      .catch(() => null);
+    throw new Error(`openConfigPanel(${this.label}): panel never opened. state=${JSON.stringify(diag)} lastClickError=${lastErr}`);
+  }
+
+  // The panel is open when the app has put `visible` on #configContent (the only thing that lifts
+  // its display:none) AND the controls inside it actually have a layout box. Add Line is checked
+  // for admins only -- the app hides it outright for dispatchers.
+  async configPanelOpen(): Promise<boolean> {
+    return this.page
+      .evaluate((needsAddLine) => {
+        const cc = document.getElementById('configContent');
+        if (!cc || !cc.classList.contains('visible')) return false;
+        const lc = document.getElementById('linesContainer');
+        if (!lc || lc.offsetParent === null) return false;
+        if (!needsAddLine) return true;
+        const btn = document.querySelector('.add-line-btn') as HTMLElement | null;
+        return !!(btn && btn.offsetParent !== null);
+      }, this.role === 'admin')
+      .catch(() => false);
   }
 
   // ---- read helpers ----
@@ -167,7 +240,10 @@ export class Actor {
   async lineCount(): Promise<number> {
     return this.page.locator('#linesContainer .line-config').count().catch(() => 0);
   }
+  // The Add Line button lives in the config panel but OUTSIDE #linesContainer, so a Firebase
+  // re-render never rebuilds it: with the panel verifiably open, one real click is enough.
   async addLine(): Promise<void> {
+    await this.openConfigPanel();
     await this.page.locator('.add-line-btn').click();
   }
   async setMaxPeople(n: number): Promise<void> {

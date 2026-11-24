@@ -2289,8 +2289,8 @@
         //  - Under the current public rules it's not required — if the Anonymous provider is not
         //    enabled, sign-in fails, we log it, and everything still works.
         //  - Once the locked-down rules ('.write': 'auth != null') are published AND the Anonymous
-        //    provider is enabled in the Firebase console, the SDK automatically attaches the auth
-        //    token to database writes, so writes keep working with no further code changes.
+        //    provider is enabled in the Firebase console, the SDK attaches the auth token to
+        //    database writes -- but NOT to writes issued before sign-in resolves (see dbWrite).
         // Writes that must satisfy the rule (e.g. seeding) wait on `authReady` first.
         let authReady = Promise.resolve();
 
@@ -2312,6 +2312,88 @@
             console.error('Error initializing Firebase:', error);
             alert('Failed to initialize Firebase. Please check your configuration.');
         }
+
+        // ========================================
+        // Write gate: surviving the pre-sign-in window
+        // ========================================
+        // Anonymous sign-in takes roughly 0.5-1s after a page load, and the SDK does NOT hold a
+        // write until the token is attached. Measured against the live locked-down rules: a write
+        // issued at t=410ms was DENIED at t=777ms, while sign-in only resolved at t=1039ms. The
+        // password is cached in localStorage, so a returning device skips the modal and can click
+        // inside that window -- the schedule-form save is the likeliest victim, since it is the
+        // first thing an admin clicks when setting up.
+        //
+        // Rather than delay every write, issue it immediately and retry ONCE, only when it was
+        // rejected for permission WHILE sign-in was still in flight. The happy path is therefore
+        // untouched: same call, same ordering, same timing, no extra microtask. Every write routed
+        // through here is idempotent (a client-generated unique key, or a set/update of a value
+        // computed before the call), so a retry cannot duplicate or reorder anything.
+        let _authSettled = false;
+        authReady.finally(function () { _authSettled = true; });
+
+        function dbWrite(thunk) {
+            const p = thunk();   // runs NOW, so DOM reads inside the caller stay synchronous
+            if (!p || typeof p.catch !== 'function') return p;
+            return p.catch(function (err) {
+                const code = String((err && (err.code || err.message)) || '').toUpperCase();
+                if (code.indexOf('PERMISSION_DENIED') !== -1 && !_authSettled) {
+                    console.warn('Write rejected before sign-in completed; retrying after auth.');
+                    // .catch here so a FAILED sign-in still lets the retry through (public rules).
+                    return authReady.catch(function () { }).then(thunk);
+                }
+                throw err;
+            });
+        }
+
+        // ========================================
+        // Server-anchored clock
+        // ========================================
+        // Every start time is a wall-clock "HH:MM" string that each device re-parses with its OWN
+        // clock, so a device whose clock is off expires lines early or late and then rewrites the
+        // schedule for everybody. RTDB publishes the difference between its clock and ours at
+        // /.info/serverTimeOffset, so every scheduling decision is anchored to server time instead.
+        let _serverOffset = 0;
+        try {
+            if (database) {
+                database.ref('.info/serverTimeOffset').on('value', function (snap) {
+                    _serverOffset = snap.val() || 0;
+                });
+            }
+        } catch (e) { console.warn('serverTimeOffset unavailable, falling back to local clock:', e); }
+
+        function serverNow() { return Date.now() + _serverOffset; }
+
+        // Rescheduling must only ever happen on a view we know is current. The authoritative
+        // signal is the RTDB connection, NOT the tick cadence: a tab whose timers are throttled
+        // (hidden tabs get one callback per minute) still has a live websocket delivering
+        // snapshots, so it is not stale and must stay free to advance lines. A tab that is
+        // disconnected, or that has just reconnected and not yet been re-sent the state, may be
+        // holding a schedule another client has already advanced.
+        let _connected = false;
+        let _connectedSince = 0;
+        let _lastSnapshotAt = 0;
+        const RESYNC_GRACE_MS = 10000;
+        try {
+            if (database) {
+                database.ref('.info/connected').on('value', function (snap) {
+                    const up = snap.val() === true;
+                    if (up && !_connected) _connectedSince = serverNow();
+                    _connected = up;
+                });
+            }
+        } catch (e) { console.warn('.info/connected unavailable:', e); }
+
+        function scheduleViewIsStale() {
+            if (!_connected) return true;                         // offline: we cannot know
+            if (_lastSnapshotAt >= _connectedSince) return false;  // re-synced since connecting
+            return serverNow() - _connectedSince < RESYNC_GRACE_MS; // still awaiting the resync
+        }
+
+        // Identifies this tab in the reschedule audit log (see logReschedule).
+        const CLIENT_ID = (function () {
+            try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().slice(0, 8); } catch (e) { /* ignore */ }
+            return Math.random().toString(36).slice(2, 10);
+        })();
 
         // ========================================
         // Data-model helpers: keyed objects <-> arrays, granular writes, migration
@@ -2453,6 +2535,42 @@
 
         function lineRef(id) { return stateRef.child('config/lines/' + id); }
 
+        // ========================================
+        // Reschedule audit log  (<namespace>/log)
+        // ========================================
+        // Nothing used to record WHO moved a line's start time, WHEN, or from what -- which is why
+        // the block-2 collision could only be diagnosed from a photo of the venue screen. Every
+        // reschedule attempt is recorded now, aborted ones included: an aborted attempt is the
+        // fingerprint of a tab acting on a stale view.
+        function logRef() { return stateRef.child('log'); }
+
+        function logReschedule(entry) {
+            if (currentRole === 'viewer' || !stateRef) return;
+            try {
+                const p = logRef().push(Object.assign({
+                    role: currentRole,
+                    clientId: CLIENT_ID,
+                    clientNow: Date.now(),
+                    offset: _serverOffset,
+                    at: firebase.database.ServerValue.TIMESTAMP
+                }, entry));
+                if (p && p.catch) p.catch(function (err) { console.error('Audit log write failed:', err && (err.code || err.message) || err); });
+            } catch (e) { console.error('Audit log write failed:', e); }
+        }
+
+        // Keep the node small: an admin tab drops entries older than a week, once per load.
+        const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+        function pruneRescheduleLog() {
+            if (currentRole !== 'admin' || !stateRef) return;
+            logRef().orderByChild('at').endAt(Date.now() - LOG_RETENTION_MS).limitToFirst(200)
+                .once('value').then(function (snap) {
+                    const updates = {};
+                    snap.forEach(function (child) { updates[child.key] = null; });
+                    if (Object.keys(updates).length) return logRef().update(updates);
+                }).catch(function (err) { console.warn('Audit log prune skipped:', err); });
+        }
+        authReady.finally(function () { try { pruneRescheduleLog(); } catch (e) { /* ignore */ } });
+
         // The database security rules enforce `.validate: newData.hasChildren(['timestamp','config'])`
         // at /state, and that validation cascades to descendant writes. So on an EMPTY /state the
         // first granular write (which doesn't include `timestamp`) is rejected with permission denied.
@@ -2533,6 +2651,10 @@
                     if (isLegacyShape(newState.config)) {
                         migrateToKeyed();
                     }
+
+                    // Our view is current again: a snapshot just landed. Recorded before
+                    // updateTimers() below, which ticks immediately.
+                    _lastSnapshotAt = serverNow();
 
                     // Update UI elements
                     updateUIFromState(newState.config);
@@ -2696,7 +2818,7 @@
             // Client-generated unique key (never collides across devices, unlike length+1).
             const lineId = newId();
             // Granular write: create only this line node. Other devices' lines are untouched.
-            lineRef(lineId).set({ name: `Line ${nextNumber}`, time: '', order: nextOrder }).catch(handleWriteError);
+            dbWrite(() => lineRef(lineId).set({ name: `Line ${nextNumber}`, time: '', order: nextOrder })).catch(handleWriteError);
             // UI updates arrive via the Firebase listener.
         }
 
@@ -2801,7 +2923,7 @@
         }
 
         function generateTimeOptions() {
-            const now = new Date();
+            const now = new Date(serverNow());
             const startTime = new Date(now);
             startTime.setMinutes(Math.ceil(startTime.getMinutes() / 5) * 5);
             startTime.setSeconds(0);
@@ -2820,7 +2942,7 @@
 
         function parseTime(hm) {
             const [h, m] = hm.split(':').map(Number);
-            const d = new Date();
+            const d = new Date(serverNow());
             d.setHours(h, m, 0, 0);
             return d.getTime();
         }
@@ -2840,7 +2962,8 @@
                 updates['config/lines/' + config.id + '/time'] = timeSelect.value;
             });
             if (currentRole !== 'viewer' && Object.keys(updates).length) {
-                stateRef.update(updates).catch(handleWriteError);
+                // The setup click most likely to land inside the pre-sign-in window.
+                dbWrite(() => stateRef.update(updates)).catch(handleWriteError);
             }
 
             updateTimers();
@@ -3007,6 +3130,68 @@
             _globalTickId = setInterval(globalTick, 200);
         }
 
+        // Only used to log a tick gap for diagnosis. A gap does NOT suppress rescheduling: see
+        // scheduleViewIsStale(), which keys off the connection instead.
+        const TICK_GAP_MS = 5000;
+        let _lastTickAt = 0;
+
+        // lineId -> serverNow() when a reschedule write was issued. Stops the 200 ms tick
+        // re-firing the same write. Timed out rather than cleared only by the callback, because
+        // RTDB does not run a transaction's completion callback while the client is offline, and
+        // a line must not be blocked from advancing for the rest of the event because of it. A
+        // retry issued after the timeout is adjudicated by the compare-and-swap anyway.
+        const _rescheduleInFlight = {};
+        const INFLIGHT_TIMEOUT_MS = 30000;
+        function rescheduleInFlight(line) {
+            const issued = _rescheduleInFlight[line];
+            if (!issued) return false;
+            if (serverNow() - issued > INFLIGHT_TIMEOUT_MS) { delete _rescheduleInFlight[line]; return false; }
+            return true;
+        }
+
+        // lineId -> serverNow() until which this line is not retried, applied after a compare-and-
+        // swap abort so a stale tab does not spin on aborts until its next snapshot lands.
+        const _rescheduleCooldown = {};
+        const COOLDOWN_MS = 3000;
+        function rescheduleCoolingDown(line) { return (_rescheduleCooldown[line] || 0) > serverNow(); }
+
+        // Advance a line's start time with a compare-and-swap: write only if the stored value is
+        // still the one this tab last saw. A tab resuming from sleep with stale state therefore
+        // cannot clobber a line another client already advanced -- its transaction aborts, the
+        // abort is logged, and it waits for a fresh snapshot instead.
+        function commitReschedule(line, config, prevTimeStr, newTimeStr) {
+            _rescheduleInFlight[line] = serverNow();
+            const lineName = config.name;
+            lineRef(line).child('time').transaction(function (cur) {
+                // Returning undefined aborts the transaction and leaves `cur` untouched.
+                if ((cur || '') !== (prevTimeStr || '')) return;
+                return newTimeStr;
+            }, function (err, committed) {
+                delete _rescheduleInFlight[line];
+                if (err) handleWriteError(err);
+                if (committed) {
+                    // Local state is authoritative only once the write has landed; otherwise the
+                    // next snapshot supplies the truth.
+                    config.time = newTimeStr;
+                    if (newTimeStr) scheduledTimes[line] = parseTime(newTimeStr);
+                    else delete scheduledTimes[line];
+                    const timeSelect = document.getElementById('time' + line);
+                    if (timeSelect) timeSelect.value = newTimeStr;
+                } else if (!err) {
+                    // Someone else got there first. Back off briefly rather than re-firing every
+                    // tick: the transaction has already refreshed this path, so the snapshot that
+                    // corrects our view is moments away.
+                    _rescheduleCooldown[line] = serverNow() + COOLDOWN_MS;
+                    console.warn('Reschedule of ' + lineName + ' aborted (expected "' + prevTimeStr +
+                        '"); another client already advanced it.');
+                }
+                logReschedule({
+                    lineId: line, lineName: lineName, from: prevTimeStr || '', to: newTimeStr || '',
+                    committed: !!committed, error: err ? String((err && err.message) || err) : null
+                });
+            }, false);
+        }
+
         function tickOneLine(config) {
             const line = config.id;
             let timer = null;
@@ -3023,7 +3208,7 @@
                 return 'inactive';
             }
 
-            const now = Date.now();
+            const now = serverNow();
             let status;
 
             if (now < startT) {
@@ -3052,22 +3237,19 @@
                     warned30[line] = undefined;
 
                     // Auto-reschedule (writers only — viewers must never write).
-                    if (currentRole !== 'viewer') {
+                    // Suppressed while this tab's view of the DB may be stale (disconnected, or
+                    // reconnected without a resync yet): a tab that just woke up must not re-expire
+                    // lines another client has already advanced. commitReschedule() compare-and-
+                    // swaps as a second line of defence.
+                    if (currentRole !== 'viewer' && !scheduleViewIsStale() &&
+                        !rescheduleInFlight(line) && !rescheduleCoolingDown(line)) {
                         const autoRescheduleValue = document.getElementById('autoReschedule').value;
+                        const prevTimeStr = config.time;
                         if (autoRescheduleValue !== 'off') {
-                            const nextStart = getNextFiveMinuteSlot(Date.now(), parseInt(autoRescheduleValue));
-                            const newTimeStr = formatTime(new Date(nextStart));
-                            scheduledTimes[line] = nextStart; // synchronous -> only one write fires
-                            config.time = newTimeStr;
-                            const timeSelect = document.getElementById(`time${line}`);
-                            if (timeSelect) timeSelect.value = newTimeStr;
-                            lineRef(line).update({ time: newTimeStr }).catch(handleWriteError);
+                            const nextStart = nextStartForLine(startT, parseInt(autoRescheduleValue));
+                            commitReschedule(line, config, prevTimeStr, formatTime(new Date(nextStart)));
                         } else {
-                            delete scheduledTimes[line];
-                            config.time = '';
-                            const timeSelect = document.getElementById(`time${line}`);
-                            if (timeSelect) timeSelect.value = '';
-                            lineRef(line).update({ time: '' }).catch(handleWriteError);
+                            commitReschedule(line, config, prevTimeStr, '');
                         }
                     }
                 } else {
@@ -3114,6 +3296,15 @@
         }
 
         function globalTick() {
+            // A gap means the loop was not running (sleep / lock / throttled or discarded tab).
+            // Logged for diagnosis only -- suppressing on it would permanently disable
+            // rescheduling on a throttled-but-connected tab, whose data is in fact current.
+            const t = serverNow();
+            if (_lastTickAt && t - _lastTickAt > TICK_GAP_MS) {
+                console.log('Tick gap of ' + Math.round((t - _lastTickAt) / 1000) + 's');
+            }
+            _lastTickAt = t;
+
             let anyActive = false;
             for (let i = 0; i < lineConfigs.length; i++) {
                 try {
@@ -3149,7 +3340,8 @@
             const personId = newId();
             // Granular write to a UNIQUE key: never clobbers a concurrent add, and RTDB caches it
             // while offline and flushes it on reconnect.
-            lineRef(lineId).child('people/' + personId).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            const personEntry = { name: name, ts: Date.now() };   // hoisted so a retry writes the SAME payload
+            dbWrite(() => lineRef(lineId).child('people/' + personId).set(personEntry)).catch(handleWriteError);
 
             input.value = '';
             // UI updates arrive via the Firebase listener.
@@ -3189,7 +3381,8 @@
 
             const personId = newId();
             // Granular write: only this line's waitQueue subtree (never touches the general queue).
-            lineRef(lineId).child('waitQueue/' + personId).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            const queueEntry = { name: name, ts: Date.now() };    // hoisted so a retry writes the SAME payload
+            dbWrite(() => lineRef(lineId).child('waitQueue/' + personId).set(queueEntry)).catch(handleWriteError);
             input.value = '';
         }
 
@@ -3395,7 +3588,8 @@
             if (_configWriteTimer) clearTimeout(_configWriteTimer);
             _configWriteTimer = setTimeout(() => {
                 _configWriteTimer = null;
-                stateRef.child('config').update(currentScalars()).catch(handleWriteError);
+                const scalars = currentScalars();                 // snapshot, so a retry is not a second read
+                dbWrite(() => stateRef.child('config').update(scalars)).catch(handleWriteError);
             }, 400);
         }
 
@@ -3550,7 +3744,9 @@
             const input = document.getElementById('newGeneralWaitQueuePerson');
             const name = input.value.trim();
             if (!name) return;
-            generalQueueRef().child(newId()).set({ name: name, ts: Date.now() }).catch(handleWriteError);
+            const generalEntry = { name: name, ts: Date.now() };  // hoisted so a retry writes the SAME payload
+            const generalId = newId();                            // and to the SAME key
+            dbWrite(() => generalQueueRef().child(generalId).set(generalEntry)).catch(handleWriteError);
             input.value = '';
         }
 
@@ -3656,7 +3852,7 @@
 
         // Update current time display
         function updateCurrentTime() {
-            const now = new Date();
+            const now = new Date(serverNow());
             const timeString = now.toLocaleTimeString('en-US', {
                 hour12: false,
                 hour: '2-digit',
@@ -3672,12 +3868,11 @@
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
 
-        // Helper to get the next 5-minute slot after a given interval
-        function getNextFiveMinuteSlot(baseTime, intervalMinutes) {
-            const d = new Date(baseTime + intervalMinutes * 60 * 1000);
+        // Round a timestamp up onto the 5-minute clock grid.
+        function roundUpTo5(t) {
+            const d = new Date(t);
             d.setSeconds(0, 0);
-            const minutes = d.getMinutes();
-            const next5 = Math.ceil(minutes / 5) * 5;
+            const next5 = Math.ceil(d.getMinutes() / 5) * 5;
             if (next5 === 60) {
                 d.setHours(d.getHours() + 1);
                 d.setMinutes(0);
@@ -3687,12 +3882,39 @@
             return d.getTime();
         }
 
+        // Next start for a line, anchored on that line's OWN previous start -- never on "now".
+        //
+        // The old code used `now + gap, rounded up`, which made the result depend on WHEN a client
+        // happened to notice the expiry. A tab that woke up late saw several lines as expired in a
+        // single tick and handed them all the SAME slot, so two lines started together and the
+        // stagger between lines was destroyed (the block-2 collision). Anchoring on startT makes
+        // the write idempotent: every client computes the same answer no matter when it looks.
+        //
+        // With sessionDuration=30 and gap=5 the cycle is 35 min, which reproduces the published
+        // block schedule exactly:
+        //   Line 1  20:00 -> 20:35 -> 21:10
+        //   Line 2  20:10 -> 20:45 -> 21:20
+        //   Line 3  20:20 -> 20:55 -> 21:30
+        function nextStartForLine(startT, gapMin) {
+            const cycle = TOTAL_SESSION_TIME + gapMin * 60 * 1000;
+            let next = roundUpTo5(startT + cycle);
+            if (!(cycle > 0)) return next; // misconfigured: never loop
+            // Away for one or more whole cycles (asleep, offline, tab discarded)? Advance in WHOLE
+            // cycles so the line keeps its phase, and therefore its stagger against the other
+            // lines. A genuinely missed slot is SKIPPED rather than pulled forward onto another
+            // line's slot -- missing one run is the honest outcome; two lines starting together
+            // is not.
+            let guard = 0;
+            while (next <= serverNow() && guard++ < 1000) next = roundUpTo5(next + cycle);
+            return next;
+        }
+
         // Function to update next line information
         function updateNextLineInfo() {
             const nextLineInfoElement = document.getElementById('nextLineInfo');
             if (!nextLineInfoElement) return;
 
-            const now = Date.now();
+            const now = serverNow();
             let nextLineToStart = null;
             let nextLineToFinish = null;
             let minTimeToStart = Infinity;
@@ -3753,6 +3975,33 @@
                 }
             }
         }
+
+        // Test hook: the Playwright scheduling suite exercises the slot maths directly rather than
+        // waiting out real 30-minute sessions. Exposed ONLY to the local harness -- a page served
+        // from localhost, or one opened with ?diag=1 -- because commitReschedule() would otherwise
+        // let anyone with a console on the venue machine rewrite every screen's schedule, and the
+        // totalSessionTime setter would silently resize every running session.
+        (function () {
+            const host = location.hostname;
+            const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '';
+            let diag = false;
+            try { diag = new URLSearchParams(location.search).get('diag') === '1'; } catch (e) { /* ignore */ }
+            if (!isLocal && !diag) return;
+            window.__sched = {
+                roundUpTo5: roundUpTo5,
+                nextStartForLine: nextStartForLine,
+                commitReschedule: commitReschedule,
+                serverNow: serverNow,
+                parseTime: parseTime,
+                formatTime: formatTime,
+                scheduleViewIsStale: scheduleViewIsStale,
+                // Pretends the tick loop was paused for `ms`, so a test can prove that a long
+                // gap does NOT stop a connected tab from rescheduling.
+                forceTickGap: function (ms) { _lastTickAt = serverNow() - ms; },
+                get totalSessionTime() { return TOTAL_SESSION_TIME; },
+                set totalSessionTime(v) { TOTAL_SESSION_TIME = v; }
+            };
+        })();
 
         // Update next line information every 30 seconds
         setInterval(updateNextLineInfo, 30000);
