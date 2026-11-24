@@ -214,3 +214,46 @@ test('6. an offline tab is treated as stale, and recovers once it has re-synced'
   await a.goOnline();
   await expect.poll(stale, { timeout: 30_000 }).toBe(false);
 });
+
+// Regression test for the pre-sign-in write window, which only became reachable once the
+// locked-down rules ('.write': 'auth != null') were published. Anonymous sign-in takes ~1s and the
+// SDK does NOT hold writes until the token is attached, so a write issued in that window is
+// rejected outright. The password is cached in localStorage, so a returning device skips the modal
+// and can click inside it. Stalling the sign-in round-trip makes the window wide and deterministic.
+// Without dbWrite's retry, the person never lands and the add is silently lost.
+test('7. a click made before sign-in completes is retried, not swallowed', async ({ browser }) => {
+  test.setTimeout(120_000);
+
+  // Seed through a normal admin: the page's own seed waits on authReady, which the stalled actor
+  // below will not reach for several seconds.
+  const setup = await admin(browser, 'setup');
+  const [lineA] = await ensureLines(setup, 1);
+  await oracle.patchConfig({ maxPeoplePerLine: '10' });
+
+  const STALL = 6000;
+  const slow = track(await Actor.create(browser, {
+    label: 'slow-auth', role: 'admin', query: 'diag=1', stallAuthMs: STALL,
+  }));
+
+  // By construction this click happens while sign-in is still in flight.
+  await slow.addPersonToLine(0, 'Window Tester');
+
+  const people = await waitFor(
+    async () => ((await oracle.lines()).find((l) => l.id === lineA)?.people ?? []) as any[],
+    (ps: any[]) => ps.some((p) => p && p.name === 'Window Tester'),
+    STALL + 30_000,
+  );
+
+  // It landed...
+  expect(people.map((p: any) => p.name)).toContain('Window Tester');
+
+  // ...via the retry, not because the write happened to succeed (which is what would happen if the
+  // rules were still public). This is the assertion that makes the test meaningful.
+  expect(
+    slow.logs.filter((l) => /retrying after auth/i.test(l)),
+    `no retry log — the write was never denied, so this test proved nothing. Logs:\n${slow.logs.join('\n')}`,
+  ).not.toHaveLength(0);
+
+  // And exactly once: the retry must not duplicate the person.
+  expect(people.filter((p: any) => p.name === 'Window Tester')).toHaveLength(1);
+});

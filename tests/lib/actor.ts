@@ -18,6 +18,7 @@ export class Actor {
   page!: Page;
   cdp!: CDPSession;
   errors: string[] = [];
+  logs: string[] = [];
 
   private constructor(label: string, role: Role) {
     this.label = label;
@@ -26,7 +27,12 @@ export class Actor {
 
   // `query` appends extra URL parameters (e.g. 'diag=1', which the app requires before exposing
   // its scheduling test hook on a non-localhost deployment).
-  static async create(browser: Browser, opts: { label: string; role: Role; query?: string }): Promise<Actor> {
+  // `stallAuthMs` delays the anonymous sign-in round-trip, which widens the window in which the
+  // app's writes carry no auth token (see the dbWrite gate in index.html) and makes it testable.
+  static async create(
+    browser: Browser,
+    opts: { label: string; role: Role; query?: string; stallAuthMs?: number },
+  ): Promise<Actor> {
     const a = new Actor(opts.label, opts.role);
     a.context = await browser.newContext();
     a.page = await a.context.newPage();
@@ -45,9 +51,21 @@ export class Actor {
     });
 
     a.page.on('pageerror', (err) => a.errors.push(`[pageerror] ${err.message}`));
-    a.page.on('console', (msg) => { if (msg.type() === 'error') a.errors.push(`[console.error] ${msg.text()}`); });
+    a.page.on('console', (msg) => {
+      a.logs.push(`[${msg.type()}] ${msg.text()}`);
+      if (msg.type() === 'error') a.errors.push(`[console.error] ${msg.text()}`);
+    });
 
     a.cdp = await a.context.newCDPSession(a.page);
+
+    // Must be installed BEFORE the first navigation, or sign-in has already gone out.
+    if (opts.stallAuthMs) {
+      const delay = opts.stallAuthMs;
+      await a.context.route('**/identitytoolkit.googleapis.com/**', async (route) => {
+        await new Promise((r) => setTimeout(r, delay));
+        await route.continue().catch(() => {});
+      });
+    }
 
     const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}${opts.query ? '&' + opts.query : ''}`;
     await a.page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -103,8 +121,33 @@ export class Actor {
   async lineCount(): Promise<number> {
     return this.page.locator('#linesContainer .line-config').count().catch(() => 0);
   }
+  // Retry around the real button. The config panel may be collapsed, or mid-rebuild from a
+  // Firebase re-render, when this is called -- the button then exists but is not clickable, and a
+  // single click times out. (ensureConfigOpen() does NOT cover this: it no-ops when zero lines
+  // exist, which is precisely the empty-database case every spec starts from.) Without this the
+  // alarm churn spec flakes on main as well as on feature branches.
   async addLine(): Promise<void> {
-    await this.page.locator('.add-line-btn').click();
+    const btn = this.page.locator('.add-line-btn');
+    // Hard deadline: retrying for longer hides a genuine failure behind the spec's own timeout,
+    // which is far harder to diagnose than a fast, explicit error.
+    const deadline = Date.now() + 12_000;
+    let lastErr = '';
+    while (Date.now() < deadline) {
+      if (await btn.isVisible().catch(() => false)) {
+        try { await btn.click({ timeout: 1500 }); return; } catch (e: any) { lastErr = String(e && e.message || e).split('\n')[0]; }
+      } else {
+        // Not visible => panel collapsed or still rendering. Expanding is gated by the check
+        // above, so this cannot toggle an already-open panel shut.
+        await this.page.locator('.config-header').click().catch(() => {});
+      }
+      await this.page.waitForTimeout(200);
+    }
+    const diag = await this.page.evaluate(() => {
+      const lc = document.getElementById('linesContainer');
+      const b = document.querySelector('.add-line-btn') as HTMLElement | null;
+      return { panelVisible: !!(lc && lc.offsetParent !== null), btnExists: !!b, btnVisible: !!(b && b.offsetParent) };
+    }).catch(() => null);
+    throw new Error(`addLine: button never became clickable after 12s. state=${JSON.stringify(diag)} lastClickError=${lastErr}`);
   }
   async setMaxPeople(n: number): Promise<void> {
     await this.page.selectOption('#maxPeople', String(n)).catch(async () => {
