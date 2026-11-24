@@ -70,6 +70,14 @@ export class Actor {
     const url = `${BASE_URL}${APP_PAGE}?role=${opts.role}${opts.query ? '&' + opts.query : ''}`;
     await a.page.goto(url, { waitUntil: 'domcontentloaded' });
 
+    // The app reveals its password gate from a window 'load' handler, NOT at DOMContentLoaded, and
+    // the page pulls ~500KB of alarm audio plus the Firebase SDK, so 'load' can land hundreds of ms
+    // after 'domcontentloaded'. Checking for the gate before 'load' finds nothing, skips the whole
+    // password branch, and the modal then appears on top of everything (z-index 3000) and silently
+    // eats every subsequent click -- including the one that opens the config panel. Wait for 'load'
+    // first so the gate is either up or genuinely absent.
+    await a.page.waitForLoadState('load').catch(() => {});
+
     // Dismiss the password modal if present.
     const pw = a.page.locator('#passwordInput');
     if (await pw.isVisible().catch(() => false)) {
@@ -77,21 +85,63 @@ export class Actor {
       await a.page.locator('#passwordModal button', { hasText: 'Submit' }).click().catch(async () => {
         await pw.press('Enter');
       });
-      await a.page.locator('#passwordModal').waitFor({ state: 'hidden' }).catch(() => {});
     }
+    // Assert the gate is really gone before touching anything behind it: a modal left standing is
+    // invisible to Playwright's visibility checks but intercepts every pointer event.
+    await a.page.locator('#passwordModal').waitFor({ state: 'hidden', timeout: 10_000 });
 
     // A real click here also satisfies the browser autoplay policy (audioEnabled = true).
     await a.page.mouse.click(5, 5).catch(() => {});
 
     // Admins/dispatchers: make sure the config panel is expanded so line controls are interactable.
-    if (opts.role !== 'viewer') {
-      const linesVisible = await a.page.locator('#linesContainer').isVisible().catch(() => false);
-      const anyLine = await a.page.locator('#linesContainer .line-config').count().catch(() => 0);
-      if (!linesVisible || anyLine === 0) {
-        await a.page.locator('.config-header').click().catch(() => {});
-      }
-    }
+    if (opts.role !== 'viewer') await a.openConfigPanel();
     return a;
+  }
+
+  // Open the admin config panel and VERIFY it opened. The gear toggles, so a blind click is a
+  // coin flip once anything else has touched the panel; and a swallowed click failure here used to
+  // surface much later as "<some control> is not visible" deep inside a scenario.
+  async openConfigPanel(timeoutMs = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let lastErr = '';
+    while (Date.now() < deadline) {
+      if (await this.configPanelOpen()) return;
+      await this.page
+        .locator('.config-header')
+        .click({ timeout: 2_000 })
+        .catch((e: any) => { lastErr = String((e && e.message) || e).split('\n')[0]; });
+      if (await this.configPanelOpen()) return;
+      await this.page.waitForTimeout(100);
+    }
+    const diag = await this.page
+      .evaluate(() => {
+        const cc = document.getElementById('configContent');
+        const pm = document.getElementById('passwordModal');
+        return {
+          configContentClass: cc ? cc.className : null,
+          passwordModalVisible: !!(pm && pm.className.includes('visible')),
+          readyState: document.readyState,
+        };
+      })
+      .catch(() => null);
+    throw new Error(`openConfigPanel(${this.label}): panel never opened. state=${JSON.stringify(diag)} lastClickError=${lastErr}`);
+  }
+
+  // The panel is open when the app has put `visible` on #configContent (the only thing that lifts
+  // its display:none) AND the controls inside it actually have a layout box. Add Line is checked
+  // for admins only -- the app hides it outright for dispatchers.
+  async configPanelOpen(): Promise<boolean> {
+    return this.page
+      .evaluate((needsAddLine) => {
+        const cc = document.getElementById('configContent');
+        if (!cc || !cc.classList.contains('visible')) return false;
+        const lc = document.getElementById('linesContainer');
+        if (!lc || lc.offsetParent === null) return false;
+        if (!needsAddLine) return true;
+        const btn = document.querySelector('.add-line-btn') as HTMLElement | null;
+        return !!(btn && btn.offsetParent !== null);
+      }, this.role === 'admin')
+      .catch(() => false);
   }
 
   // ---- read helpers ----
@@ -121,33 +171,11 @@ export class Actor {
   async lineCount(): Promise<number> {
     return this.page.locator('#linesContainer .line-config').count().catch(() => 0);
   }
-  // Retry around the real button. The config panel may be collapsed, or mid-rebuild from a
-  // Firebase re-render, when this is called -- the button then exists but is not clickable, and a
-  // single click times out. (ensureConfigOpen() does NOT cover this: it no-ops when zero lines
-  // exist, which is precisely the empty-database case every spec starts from.) Without this the
-  // alarm churn spec flakes on main as well as on feature branches.
+  // The Add Line button lives in the config panel but OUTSIDE #linesContainer, so a Firebase
+  // re-render never rebuilds it: with the panel verifiably open, one real click is enough.
   async addLine(): Promise<void> {
-    const btn = this.page.locator('.add-line-btn');
-    // Hard deadline: retrying for longer hides a genuine failure behind the spec's own timeout,
-    // which is far harder to diagnose than a fast, explicit error.
-    const deadline = Date.now() + 12_000;
-    let lastErr = '';
-    while (Date.now() < deadline) {
-      if (await btn.isVisible().catch(() => false)) {
-        try { await btn.click({ timeout: 1500 }); return; } catch (e: any) { lastErr = String(e && e.message || e).split('\n')[0]; }
-      } else {
-        // Not visible => panel collapsed or still rendering. Expanding is gated by the check
-        // above, so this cannot toggle an already-open panel shut.
-        await this.page.locator('.config-header').click().catch(() => {});
-      }
-      await this.page.waitForTimeout(200);
-    }
-    const diag = await this.page.evaluate(() => {
-      const lc = document.getElementById('linesContainer');
-      const b = document.querySelector('.add-line-btn') as HTMLElement | null;
-      return { panelVisible: !!(lc && lc.offsetParent !== null), btnExists: !!b, btnVisible: !!(b && b.offsetParent) };
-    }).catch(() => null);
-    throw new Error(`addLine: button never became clickable after 12s. state=${JSON.stringify(diag)} lastClickError=${lastErr}`);
+    await this.openConfigPanel();
+    await this.page.locator('.add-line-btn').click();
   }
   async setMaxPeople(n: number): Promise<void> {
     await this.page.selectOption('#maxPeople', String(n)).catch(async () => {
