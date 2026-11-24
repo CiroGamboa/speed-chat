@@ -8,6 +8,24 @@ This guide will help you test the Firebase migration to ensure all sync issues a
 2. Update the Firebase config in `index.html` with your actual Firebase credentials
 3. Deploy the updated `index.html` to GitHub Pages or test locally
 
+## Pre-event sound check (do this every time, before doors open)
+
+The alarm being silent is the failure that has actually hurt events, and no automated test
+can catch it — nothing in a browser can tell whether a noise reached the room. Full detail
+and the Spanish version are in `AUDIO_TROUBLESHOOTING.md`.
+
+1. Open the app on the machine that will drive the speaker.
+2. If the red **"ALARM SOUND IS NOT ENABLED — CLICK HERE"** banner is showing, click it.
+   It must disappear. (Browsers block audio until the page is clicked, and the password box
+   no longer appears on a machine that has used the app before — so a screen nobody touches
+   never gets that click.)
+3. Press **Test sound**, and answer **Yes, I heard it** only if the speaker really sounded.
+4. Confirm the badge beside the Alarm switch reads **"Alarm armed · heard HH:MM"**.
+5. Repeat 3-4 after re-pairing the speaker, changing output device, waking the machine, or
+   reloading the page.
+
+If anything fails, open the gear icon → **Download alarm diagnostics** and keep the file.
+
 ## Test Scenarios
 
 ### Test 1: Basic Sync - Adding People to Lines

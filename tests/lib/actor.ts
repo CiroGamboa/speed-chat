@@ -6,7 +6,7 @@ import { stateNs } from './dbOracle';
 
 const PASSWORD = 'speedchat2025';
 const APP_PAGE = process.env.APP_PAGE || '/';
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
+const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.TEST_PORT || 8080}`;
 
 export type Role = 'admin' | 'dispatcher' | 'viewer';
 
@@ -19,6 +19,7 @@ export class Actor {
   page!: Page;
   cdp!: CDPSession;
   errors: string[] = [];
+  logs: string[] = [];
 
   private constructor(label: string, role: Role) {
     this.label = label;
@@ -27,7 +28,18 @@ export class Actor {
 
   // `query` appends extra URL parameters (e.g. 'diag=1', which the app requires before exposing
   // its scheduling test hook on a non-localhost deployment).
-  static async create(browser: Browser, opts: { label: string; role: Role; query?: string }): Promise<Actor> {
+  // `stallAuthMs` delays the anonymous sign-in round-trip, which widens the window in which the
+  // app's writes carry no auth token (see the dbWrite gate in index.html) and makes it testable.
+  // `skipArmingClick` / `seedPasswordFlag` reproduce the venue screen nobody has clicked: no
+  // gesture, and a password already cached, so the modal never appears to supply one.
+  static async create(
+    browser: Browser,
+    opts: {
+      label: string; role: Role;
+      query?: string; stallAuthMs?: number;
+      skipArmingClick?: boolean; seedPasswordFlag?: boolean;
+    },
+  ): Promise<Actor> {
     const a = new Actor(opts.label, opts.role);
     a.context = await browser.newContext();
     a.page = await a.context.newPage();
@@ -45,10 +57,30 @@ export class Actor {
       };
     });
 
+    // Reproduce the venue machine: the password was entered once long ago, so the modal
+    // never shows again and the page can run all night without a single click.
+    if (opts.seedPasswordFlag) {
+      await a.context.addInitScript(() => {
+        try { localStorage.setItem('speedchat_password_verified', 'true'); } catch (e) { /* ignore */ }
+      });
+    }
+
     a.page.on('pageerror', (err) => a.errors.push(`[pageerror] ${err.message}`));
-    a.page.on('console', (msg) => { if (msg.type() === 'error') a.errors.push(`[console.error] ${msg.text()}`); });
+    a.page.on('console', (msg) => {
+      a.logs.push(`[${msg.type()}] ${msg.text()}`);
+      if (msg.type() === 'error') a.errors.push(`[console.error] ${msg.text()}`);
+    });
 
     a.cdp = await a.context.newCDPSession(a.page);
+
+    // Must be installed BEFORE the first navigation, or sign-in has already gone out.
+    if (opts.stallAuthMs) {
+      const delay = opts.stallAuthMs;
+      await a.context.route('**/identitytoolkit.googleapis.com/**', async (route) => {
+        await new Promise((r) => setTimeout(r, delay));
+        await route.continue().catch(() => {});
+      });
+    }
 
     // Point the app at the same DB namespace the oracle asserts against. Appended here rather than
     // left to each spec so no scenario can silently fall back to the live /state node.
@@ -58,6 +90,14 @@ export class Actor {
       `${opts.query ? '&' + opts.query : ''}`;
     await a.page.goto(url, { waitUntil: 'domcontentloaded' });
 
+    // The app reveals its password gate from a window 'load' handler, NOT at DOMContentLoaded, and
+    // the page pulls ~500KB of alarm audio plus the Firebase SDK, so 'load' can land hundreds of ms
+    // after 'domcontentloaded'. Checking for the gate before 'load' finds nothing, skips the whole
+    // password branch, and the modal then appears on top of everything (z-index 3000) and silently
+    // eats every subsequent click -- including the one that opens the config panel. Wait for 'load'
+    // first so the gate is either up or genuinely absent.
+    await a.page.waitForLoadState('load').catch(() => {});
+
     // Dismiss the password modal if present.
     const pw = a.page.locator('#passwordInput');
     if (await pw.isVisible().catch(() => false)) {
@@ -65,30 +105,127 @@ export class Actor {
       await a.page.locator('#passwordModal button', { hasText: 'Submit' }).click().catch(async () => {
         await pw.press('Enter');
       });
-      await a.page.locator('#passwordModal').waitFor({ state: 'hidden' }).catch(() => {});
     }
+    // Assert the gate is really gone before touching anything behind it: a modal left standing is
+    // invisible to Playwright's visibility checks but intercepts every pointer event.
+    await a.page.locator('#passwordModal').waitFor({ state: 'hidden', timeout: 10_000 });
 
-    // A real click here also satisfies the browser autoplay policy (audioEnabled = true).
-    await a.page.mouse.click(5, 5).catch(() => {});
+    // A real click here also satisfies the browser autoplay policy (it arms AlarmAudio).
+    // skipArmingClick leaves the page un-armed on purpose, which is the state the venue
+    // screen is actually in when the alarm shows on screen but stays silent.
+    if (!opts.skipArmingClick) {
+      await a.page.mouse.click(5, 5).catch(() => {});
+    }
 
     // Admins/dispatchers: make sure the config panel is expanded so line controls are interactable.
-    if (opts.role !== 'viewer') {
-      const linesVisible = await a.page.locator('#linesContainer').isVisible().catch(() => false);
-      const anyLine = await a.page.locator('#linesContainer .line-config').count().catch(() => 0);
-      if (!linesVisible || anyLine === 0) {
-        await a.page.locator('.config-header').click().catch(() => {});
-      }
-    }
+    if (opts.role !== 'viewer') await a.openConfigPanel();
     return a;
+  }
+
+  // Open the admin config panel and VERIFY it opened. The gear toggles, so a blind click is a
+  // coin flip once anything else has touched the panel; and a swallowed click failure here used to
+  // surface much later as "<some control> is not visible" deep inside a scenario.
+  async openConfigPanel(timeoutMs = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let lastErr = '';
+    while (Date.now() < deadline) {
+      if (await this.configPanelOpen()) return;
+      await this.page
+        .locator('.config-header')
+        .click({ timeout: 2_000 })
+        .catch((e: any) => { lastErr = String((e && e.message) || e).split('\n')[0]; });
+      if (await this.configPanelOpen()) return;
+      await this.page.waitForTimeout(100);
+    }
+    const diag = await this.page
+      .evaluate(() => {
+        const cc = document.getElementById('configContent');
+        const pm = document.getElementById('passwordModal');
+        return {
+          configContentClass: cc ? cc.className : null,
+          passwordModalVisible: !!(pm && pm.className.includes('visible')),
+          readyState: document.readyState,
+        };
+      })
+      .catch(() => null);
+    throw new Error(`openConfigPanel(${this.label}): panel never opened. state=${JSON.stringify(diag)} lastClickError=${lastErr}`);
+  }
+
+  // The panel is open when the app has put `visible` on #configContent (the only thing that lifts
+  // its display:none) AND the controls inside it actually have a layout box. Add Line is checked
+  // for admins only -- the app hides it outright for dispatchers.
+  async configPanelOpen(): Promise<boolean> {
+    return this.page
+      .evaluate((needsAddLine) => {
+        const cc = document.getElementById('configContent');
+        if (!cc || !cc.classList.contains('visible')) return false;
+        const lc = document.getElementById('linesContainer');
+        if (!lc || lc.offsetParent === null) return false;
+        if (!needsAddLine) return true;
+        const btn = document.querySelector('.add-line-btn') as HTMLElement | null;
+        return !!(btn && btn.offsetParent !== null);
+      }, this.role === 'admin')
+      .catch(() => false);
   }
 
   // ---- read helpers ----
   async alarmPlays(): Promise<AlarmPlay[]> {
     return this.page.evaluate(() => (window as any).__alarmPlays || []);
   }
+  // Count rings from the app's OWN log when it is available. The app now plays through Web
+  // Audio first and only falls back to a fresh <audio> element, so counting play() calls
+  // alone would miss a ring that never touched an element. The __alarmPlays fallback keeps
+  // this working against tests/fixtures/index.unfixed.html for before/after evidence.
   async alarmPlayCount(id = 'bell'): Promise<number> {
-    const plays = await this.alarmPlays();
-    return plays.filter((p) => p.id === id).length;
+    return this.page.evaluate((clip) => {
+      const log = (window as any).__alarmLog;
+      if (Array.isArray(log)) {
+        return log.filter((e: any) => e.event === 'ring' && e.detail && e.detail.clip === clip).length;
+      }
+      return ((window as any).__alarmPlays || []).filter((p: any) => p.id === clip).length;
+    }, id);
+  }
+
+  // ---- audio health / diagnostics ----
+  async alarmLog(): Promise<Array<{ seq: number; t: number; event: string; detail: any }>> {
+    return this.page.evaluate(() => ((window as any).__alarmLog || []).slice());
+  }
+  async alarmLogEvents(name: string): Promise<any[]> {
+    const log = await this.alarmLog();
+    return log.filter((e) => e.event === name).map((e) => e.detail);
+  }
+  async audioHealth(): Promise<any> {
+    return this.page.evaluate(() => (window as any).__audioHealth || null);
+  }
+  async armBannerVisible(): Promise<boolean> {
+    return this.page.locator('#audioArmBanner').isVisible().catch(() => false);
+  }
+  async audioBadgeText(): Promise<string> {
+    return this.page.locator('#audioBadge').textContent().then((t) => (t || '').trim()).catch(() => '');
+  }
+  async warn30Visible(): Promise<boolean> {
+    return this.page.locator('#warn30Toast').isVisible().catch(() => false);
+  }
+  // Simulate the ENVIRONMENT failing (a dead sink), never a bypass of app logic.
+  async forceAudioFailure(force: { failPrimary?: boolean; failElement?: boolean }): Promise<void> {
+    await this.page.evaluate((f) => { (window as any).__audioForce = f; }, force);
+  }
+  // Arming is asynchronous (the AudioContext has to actually reach 'running'), so any
+  // assertion about a ring that must produce sound has to wait for it first.
+  async waitForArmed(timeoutMs = 15000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const h = await this.audioHealth();
+      if (h && h.armed) return;
+      await this.page.mouse.click(5, 5).catch(() => {});
+      await this.page.waitForTimeout(250);
+    }
+    throw new Error('waitForArmed: audio never armed');
+  }
+  async dispatchDeviceChange(): Promise<void> {
+    await this.page.evaluate(() => {
+      navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+    });
   }
   async notificationVisible(): Promise<boolean> {
     return this.page.locator('#changeSeatNotification').isVisible().catch(() => false);
@@ -109,7 +246,10 @@ export class Actor {
   async lineCount(): Promise<number> {
     return this.page.locator('#linesContainer .line-config').count().catch(() => 0);
   }
+  // The Add Line button lives in the config panel but OUTSIDE #linesContainer, so a Firebase
+  // re-render never rebuilds it: with the panel verifiably open, one real click is enough.
   async addLine(): Promise<void> {
+    await this.openConfigPanel();
     await this.page.locator('.add-line-btn').click();
   }
   async setMaxPeople(n: number): Promise<void> {
