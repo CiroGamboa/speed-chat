@@ -5,6 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Speed Chat Timers</title>
+    <link rel="icon" href="assets/favicon.ico" sizes="32x32">
+    <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <style>
         /* ------------------------------------------------------------------
            Design tokens, hand-ported from chill-portal/frontend/src/app/globals.css.
@@ -71,8 +74,40 @@
             --shadow-1:          0 2px 6px rgb(0 0 0 / 0.6);
             --shadow-2:          0 4px 14px rgb(0 0 0 / 0.7);
         }
+
+        /* ------------------------------------------------------------------
+           The portal's two faces, self-hosted rather than linked from Google Fonts.
+           The portal self-hosts to keep its BUILD hermetic; the reason here is the
+           runtime -- a venue's wifi is the flaky link, and a render-blocking request
+           to a third party at the moment someone opens the screen is a risk this app
+           does not need to take. 77 KB against the 454 KB alarm already in the repo.
+
+           font-display: swap is the safety valve: a face that never arrives degrades
+           to system-ui rather than leaving invisible text on the venue screen.
+           Paths are relative to this document.
+           ------------------------------------------------------------------ */
+        @font-face {
+            font-family: 'Fredoka';
+            src: url('assets/fonts/fredoka-latin-var.woff2') format('woff2');
+            font-weight: 300 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Inter';
+            src: url('assets/fonts/inter-latin-var.woff2') format('woff2');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        :root {
+            --font-heading: 'Fredoka', system-ui, sans-serif;
+            --font-body: 'Inter', system-ui, sans-serif;
+        }
         body {
-            font-family: sans-serif;
+            font-family: var(--font-body);
             background: linear-gradient(135deg, #140a12 0%, var(--background) 45%, #140a12 100%);
             background-attachment: fixed;
             margin: 0;
@@ -629,22 +664,20 @@
             font-size: 2.5rem;
         }
 
+        /* The Chill & Chat wordmark carries its own white speech bubble and a pink
+           gradient, so it reads on the dark page unaided. The pink disc that used to sit
+           behind the old mark would now fight it, so there is no plate -- just the mark. */
         .logo-container {
-            width: 180px;
-            height: 180px;
-            margin: 0 auto 2rem;
-            background: var(--action-bg-hover);
-            border-radius: 50%;
+            width: min(320px, 70vw);
+            margin: 0 auto 1.25rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            border: 2px solid var(--ring);
         }
 
         .logo {
-            width: 70%;
-            height: 70%;
+            width: 100%;
+            height: auto;
             object-fit: contain;
         }
 
@@ -1455,6 +1488,45 @@
         .config-header:hover .gear-icon,
         .config-header.open .gear-icon {
             stroke: var(--on-accent);
+        }
+
+        /* ------------------------------------------------------------------
+           Type. Fredoka for display, Inter for everything read as text --
+           the same split the portal uses.
+           ------------------------------------------------------------------ */
+        h1, h2, h3,
+        .timer .label,
+        .timer .count,
+        .people-panel .title,
+        .wait-queue-title,
+        .password-modal-content h2 {
+            font-family: var(--font-heading);
+            font-weight: 600;
+            letter-spacing: 0.01em;
+        }
+
+        .timer .count {
+            /* Proportional digits make a running countdown jitter as the glyphs change
+               width. Tabular figures hold the column still, which matters on a timer
+               someone is watching from across a room. */
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+        }
+
+        h1 {
+            font-weight: 600;
+        }
+
+        body,
+        input, select, textarea, button {
+            font-family: var(--font-body);
+        }
+
+        /* ...but the display faces above win over that blanket rule for buttons that
+           are really labels on a card. */
+        .timer .label,
+        .timer .count {
+            font-family: var(--font-heading);
         }
     </style>
 </head>
