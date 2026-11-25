@@ -47,6 +47,7 @@
             --action-bg:         var(--primary);
             --action-bg-hover:   var(--brand-pink-light);
             --action-muted-bg:   var(--secondary);
+            --action-muted-fg:   var(--text-body);   /* light ink on the dark muted fill */
 
             /* the one job #8f0057 keeps: a loud surface, white on it is 9.11:1 */
             --alarm-bg:          var(--brand-pink-dark);
@@ -612,6 +613,7 @@
 
         .line-buttons button:last-child {
             background: var(--action-muted-bg);
+            color: var(--action-muted-fg);
         }
 
         .line-buttons button:last-child:hover {
@@ -663,7 +665,7 @@
 
         .reset-btn {
             background: var(--action-muted-bg);
-            color: var(--on-accent);
+            color: var(--action-muted-fg);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -796,7 +798,7 @@
 
         .reset-btn {
             background: var(--action-muted-bg);
-            color: var(--on-accent);
+            color: var(--action-muted-fg);
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 4px;
