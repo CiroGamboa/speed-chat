@@ -276,7 +276,12 @@ export class Actor {
     return this.page.locator('#audioArmBanner').isVisible().catch(() => false);
   }
   async audioBadgeText(): Promise<string> {
-    return this.page.locator('#audioBadge').textContent().then((t) => (t || '').trim()).catch(() => '');
+    // The badge is now a traffic-light dot; its human-readable status moved from the element's
+    // text into data-tooltip (shown on hover). Read it there, falling back to textContent.
+    return this.page
+      .locator('#audioBadge')
+      .evaluate((el) => (el.getAttribute('data-tooltip') || el.textContent || '').trim())
+      .catch(() => '');
   }
   async warn30Visible(): Promise<boolean> {
     return this.page.locator('#warn30Toast').isVisible().catch(() => false);
