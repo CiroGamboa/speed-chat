@@ -80,7 +80,9 @@ test('11. a screen nobody clicks says out loud that it cannot make a sound', asy
   expect(await screen.audioBadgeText()).toContain('NOT ARMED');
 
   // A rotation on an un-armed screen must still show, and must be recorded as silent.
-  await screen.clickManualAlarm();
+  // Driven through the rotation path rather than the manual button: that button is now the
+  // sound check and ARMS the output first, so it no longer reproduces an un-armed screen.
+  await screen.fireRotationAlarm();
   await expect.poll(() => screen.notificationVisible(), { timeout: 8000 }).toBe(true);
   await expect
     .poll(async () => (await screen.alarmLogEvents('ring.result')).map((d: any) => d.detail), { timeout: 8000 })

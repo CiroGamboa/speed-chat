@@ -11,7 +11,8 @@ import { oracle, stateNs, waitFor } from './lib/dbOracle';
 import { ensureLines } from './lib/scenario';
 
 const PASSWORD = 'speedchat2025';
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
+// Mirrors actor.ts: the harness may be moved off 8080 when something else holds it.
+const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.TEST_PORT || 8080}`;
 
 test.beforeEach(async () => { await oracle.clearAll(); });
 

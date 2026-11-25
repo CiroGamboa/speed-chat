@@ -3396,13 +3396,19 @@
         // says so through the badge instead of flashing a silent banner and claiming success.
         function playAlarmManually() {
             console.log('Manual alarm triggered');
-            if (!window.AlarmAudio || !AlarmAudio.beginSoundCheck) {
-                showChangeSeatNotification(true);   // degraded, but still rings
-                return;
-            }
-            AlarmAudio.beginSoundCheck('manual').then(function (armed) {
-                if (armed) showChangeSeatNotification(true);
-            });
+
+            // Arm FIRST, so the clip is actually audible rather than rejected for want of a
+            // gesture...
+            const arming = (window.AlarmAudio && AlarmAudio.beginSoundCheck)
+                ? AlarmAudio.beginSoundCheck('manual')
+                : Promise.resolve(false);
+
+            // ...but show the alarm EITHER WAY. On a venue screen nobody has clicked, arming
+            // fails and the banner is the only warning the room gets; suppressing it there is
+            // the exact silent failure this app exists to prevent. ring() records the attempt as
+            // 'not-armed' so the badge and the diagnostics still tell the truth about the sound.
+            arming.catch(function () { /* arming never blocks the visual */ })
+                .then(function () { showChangeSeatNotification(true); });
         }
 
         // updateTimers() now ONLY rebuilds the timer DOM structure. The ticking (countdowns +

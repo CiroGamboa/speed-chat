@@ -397,6 +397,16 @@ export class Actor {
       if (t && t.checked !== on) { t.checked = on; t.dispatchEvent(new Event('change', { bubbles: true })); }
     }, on);
   }
+  // Fire the ROTATION alarm directly, without going through the manual button.
+  //
+  // The manual button now also arms the output -- it is the sound check -- so it is no longer a
+  // faithful stand-in for "a rotation happened on a screen nobody has touched". The real rotation
+  // path (tickOneLine -> showChangeSeatNotification) never arms, which is exactly the condition
+  // under test: the banner must appear and the attempt must be recorded as silent.
+  async fireRotationAlarm(): Promise<void> {
+    await this.page.evaluate(() => (window as any).showChangeSeatNotification(true));
+  }
+
   async clickManualAlarm(): Promise<void> {
     // Invoke the exact handler the button's onclick calls. (A real click can be intercepted by the
     // expanded config panel that overlaps the header button; this reliably exercises the fix.)
