@@ -5,6 +5,9 @@
 // It is deliberately SHAPE-AGNOSTIC: it understands both the new keyed-object structure (fixed app)
 // and the legacy array structure (unfixed app), so the same assertions work in before/after runs.
 
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 export const DB_BASE = 'https://chill-speed-chat-default-rtdb.firebaseio.com';
 // Which top-level DB namespace the suite reads and writes.
 //
@@ -26,25 +29,104 @@ export function isProdNs(): boolean {
 
 const API_KEY = 'AIzaSyDWcpXD5jJgq-7l8N6JRoaZu0FbZTy7jh4';
 
-// Under the locked-down rules ('.write': 'auth != null'), REST writes need an auth token. We fetch a
-// Firebase anonymous idToken lazily; if the Anonymous provider isn't enabled (current public rules),
-// this fails and we fall back to unauthenticated writes — so the suite works before AND after lockdown.
+// Under the locked-down rules ('.write': 'auth != null'), REST writes need an auth token.
+//
+// The credential is CACHED ON DISK and reused, rather than signing up a fresh anonymous user on
+// every run. Firebase rate-limits anonymous sign-up per IP, and a suite that mints new accounts
+// freely will eventually exhaust it -- at which point global-setup cannot clear the namespace and
+// the whole run dies at startup with an opaque 401 before a single test executes. Worse, a
+// throttled sign-in also makes the app slower to become writable, which surfaces as unrelated
+// timing failures (alarm test 18 was mis-diagnosed as flaky for exactly this reason).
+//
+// So: sign up at most once ever on this machine, then refresh that credential forever. An idToken
+// lasts an hour; the refresh token does not expire, and exchanging it is NOT rate-limited the way
+// sign-up is.
+//
+// The cache file holds a credential that can write to this database, so it is gitignored. It is an
+// anonymous account with no more power than any visitor's -- under `.write: 'auth != null'`
+// anyone who loads the page gets an equivalent one -- but it is still a credential, not a fixture.
+const TOKEN_CACHE = fileURLToPath(new URL('../.auth-cache.json', import.meta.url));
+
+interface CachedCredential {
+  idToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+function readCache(): CachedCredential | null {
+  try {
+    const c = JSON.parse(readFileSync(TOKEN_CACHE, 'utf8'));
+    return c && c.refreshToken ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(c: CachedCredential): void {
+  try {
+    writeFileSync(TOKEN_CACHE, JSON.stringify(c, null, 2), { mode: 0o600 });
+  } catch {
+    /* a non-writable checkout just means we sign up again next time */
+  }
+}
+
+function toCredential(j: any): CachedCredential | null {
+  // signUp returns camelCase, the token endpoint returns snake_case.
+  const idToken = j.idToken || j.id_token;
+  const refreshToken = j.refreshToken || j.refresh_token;
+  const expiresIn = Number(j.expiresIn || j.expires_in || 3600);
+  if (!idToken || !refreshToken) return null;
+  return { idToken, refreshToken, expiresAt: Date.now() + expiresIn * 1000 };
+}
+
+async function refreshCredential(refreshToken: string): Promise<CachedCredential | null> {
+  try {
+    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+    });
+    if (!r.ok) return null;
+    return toCredential(await r.json());
+  } catch {
+    return null;
+  }
+}
+
+async function signUpAnonymously(): Promise<CachedCredential | null> {
+  try {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ returnSecureToken: true }),
+    });
+    if (!r.ok) return null;
+    return toCredential(await r.json());
+  } catch {
+    return null;
+  }
+}
+
 let _tokenPromise: Promise<string | null> | null = null;
 async function authToken(): Promise<string | null> {
   if (!_tokenPromise) {
     _tokenPromise = (async () => {
-      try {
-        const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ returnSecureToken: true }),
-        });
-        if (!r.ok) return null;
-        const j = await r.json();
-        return j.idToken || null;
-      } catch {
-        return null;
+      const cached = readCache();
+
+      // Still valid, with a minute of headroom so it cannot expire mid-run.
+      if (cached && cached.expiresAt > Date.now() + 60_000) return cached.idToken;
+
+      if (cached) {
+        const refreshed = await refreshCredential(cached.refreshToken);
+        if (refreshed) { writeCache(refreshed); return refreshed.idToken; }
+        // Refresh failing means the account is gone; fall through and make a new one.
       }
+
+      const fresh = await signUpAnonymously();
+      if (fresh) { writeCache(fresh); return fresh.idToken; }
+
+      // Still works unauthenticated if the rules ever go back to public.
+      return null;
     })();
   }
   return _tokenPromise;

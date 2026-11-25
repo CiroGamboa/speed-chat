@@ -2,11 +2,82 @@
 // Handles the password gate, expands the admin config panel, instruments audio (so we can prove the
 // alarm "sounded" headlessly), captures console/page errors, and exposes network-chaos controls.
 import { Browser, BrowserContext, Page, CDPSession } from '@playwright/test';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { stateNs } from './dbOracle';
 
 const PASSWORD = 'speedchat2025';
 const APP_PAGE = process.env.APP_PAGE || '/';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.TEST_PORT || 8080}`;
+
+
+// ---------------------------------------------------------------------------
+// Shared anonymous Firebase identity for browser contexts.
+//
+// Every Playwright context starts with empty storage, so the app signs up a BRAND NEW anonymous
+// user in each one -- on the order of a hundred per full run, against the one a real device
+// creates in its lifetime (the SDK caches the account in IndexedDB and reuses it forever after).
+// Firebase rate-limits anonymous sign-up per IP, so the suite exhausts the quota on its own and
+// then fails at global-setup with an opaque 401, having run nothing.
+//
+// So one account is minted, its Firebase auth state captured, and that state handed to every
+// later context. Only the `firebaseLocalStorageDb` IndexedDB is kept: the app's own localStorage
+// is deliberately DROPPED, because carrying it over would leak the password-verified flag, the
+// alarm toggle and -- worst -- a diagnostics log containing a `ring` entry, which would make
+// alarm test 18 pass against stale evidence instead of its own.
+//
+// Cached to disk so repeated runs cost zero sign-ups. Sharing one identity is safe for the
+// assertions here: the reschedule audit log identifies a tab by CLIENT_ID, a random per-tab UUID
+// (index.html), not by the auth uid.
+// ---------------------------------------------------------------------------
+const AUTH_STATE_CACHE = fileURLToPath(new URL('../.auth-state.json', import.meta.url));
+
+function firebaseAuthOnly(state: any): any {
+  return {
+    cookies: [],
+    origins: (state.origins || [])
+      .map((o: any) => ({
+        origin: o.origin,
+        localStorage: [],
+        indexedDB: (o.indexedDB || []).filter((db: any) => db.name === 'firebaseLocalStorageDb'),
+      }))
+      .filter((o: any) => o.indexedDB.length > 0),
+  };
+}
+
+let _authStatePromise: Promise<any> | null = null;
+
+async function sharedAuthState(browser: Browser): Promise<any | undefined> {
+  if (!_authStatePromise) {
+    _authStatePromise = (async () => {
+      try {
+        const onDisk = JSON.parse(readFileSync(AUTH_STATE_CACHE, 'utf8'));
+        if (onDisk?.origins?.length) return onDisk;
+      } catch { /* no cache yet */ }
+
+      // Mint exactly one account by loading the app and letting it sign in.
+      const ctx = await browser.newContext();
+      try {
+        const page = await ctx.newPage();
+        await page.goto(`${BASE_URL}${APP_PAGE}?role=viewer`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => !!(window as any).firebase?.auth?.().currentUser,
+          undefined,
+          { timeout: 20_000 },
+        );
+        const state = firebaseAuthOnly(await ctx.storageState({ indexedDB: true } as any));
+        if (!state.origins.length) return undefined;   // nothing captured; fall back to cold auth
+        try { writeFileSync(AUTH_STATE_CACHE, JSON.stringify(state), { mode: 0o600 }); } catch { /* ignore */ }
+        return state;
+      } catch {
+        return undefined;   // never let this break a run; cold auth still works
+      } finally {
+        await ctx.close().catch(() => {});
+      }
+    })();
+  }
+  return _authStatePromise;
+}
 
 export type Role = 'admin' | 'dispatcher' | 'viewer';
 
@@ -38,10 +109,14 @@ export class Actor {
       label: string; role: Role;
       query?: string; stallAuthMs?: number;
       skipArmingClick?: boolean; seedPasswordFlag?: boolean;
+      // Forces a COLD sign-in in a context with no cached account. Only needed by the test that
+      // stalls the sign-in round-trip, which has nothing to stall if auth is already restored.
+      freshAuth?: boolean;
     },
   ): Promise<Actor> {
     const a = new Actor(opts.label, opts.role);
-    a.context = await browser.newContext();
+    const storageState = (opts.freshAuth || opts.stallAuthMs) ? undefined : await sharedAuthState(browser);
+    a.context = await browser.newContext(storageState ? { storageState } : {});
     a.page = await a.context.newPage();
 
     // Record every media play() call (the alarm) into window.__alarmPlays, before app scripts run.

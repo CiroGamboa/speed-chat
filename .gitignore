@@ -297,3 +297,8 @@ node_modules/
 # re-include the test helper library (the Python `lib/` rule above otherwise hides it)
 !tests/lib/
 !tests/lib/**
+
+# Cached anonymous Firebase credential used by the test suite (see tests/lib/dbOracle.ts).
+# It can write to the database, so it never gets committed.
+tests/.auth-cache.json
+tests/.auth-state.json
