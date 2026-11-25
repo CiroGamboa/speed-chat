@@ -301,8 +301,31 @@
                 align-items: flex-start;
             }
 
+            /* Three fixed controls -- the alarm cluster, the gear and the clock -- plus the
+               logo all sat in the same top band and collided at phone width: the logo was
+               hidden behind the alarm bar and the bar ran off the right edge. Lay them out
+               explicitly, and push the page content below the strip so nothing overlaps. */
             body {
-                padding: 1rem 0;
+                padding: 6.75rem 0 1rem;
+            }
+            .alarm-toggle-container {
+                top: 0.5rem;
+                left: 0.5rem;
+                right: 5rem;           /* stop short of the gear; never run off-screen */
+                flex-wrap: wrap;       /* the status badge drops to a second row rather than overflow */
+                justify-content: flex-start;
+            }
+            .config-header {
+                top: 0.5rem !important;
+                right: 0.5rem !important;
+            }
+            #currentTimeDisplay {
+                top: auto !important;
+                bottom: 0.75rem !important;
+                left: 0.75rem !important;   /* tucked out of the header entirely */
+            }
+            .logo-container {
+                width: min(150px, 40vw);
             }
 
             /* Hide alarm toggle when config is open on mobile */
